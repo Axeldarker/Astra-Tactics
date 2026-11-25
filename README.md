@@ -1,4 +1,6 @@
-# TacticsMZ
+# Astra Tactics
+
+**TacticsMZ** (plugins) + **Astra Editor** (editor visual).
 
 Plugins de **RPG Maker MZ** para crear juegos tácticos por turnos (estilo *Fire Emblem*) usando solo comandos de evento.
 

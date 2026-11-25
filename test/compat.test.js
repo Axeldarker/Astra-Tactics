@@ -4,8 +4,10 @@
 const test=require("node:test"),assert=require("node:assert"),{execSync}=require("child_process");
 const {loadEngine,cmd,event,map,mzDatabase}=require("./helpers");
 let legacy=null;
+// Commit que añadió la v0.2.0 original (o LEGACY_REF si se indica).
+const legacyRef=()=>process.env.LEGACY_REF||execSync("git log --all --diff-filter=A --format=%H -- :/plugins/TacticsSystem.js",{cwd:__dirname,stdio:["ignore","pipe","ignore"]}).toString().trim().split("\n").pop();
 try{
- const files=["TacticsSystem","TacticsCommands","TacticsRules","TacticsData"].map(f=>execSync("git show "+(process.env.LEGACY_REF||"18ffd17")+":plugins/"+f+".js",{cwd:__dirname,stdio:["ignore","pipe","ignore"]}).toString());
+ const files=["TacticsSystem","TacticsCommands","TacticsRules","TacticsData"].map(f=>execSync("git show "+legacyRef()+":plugins/"+f+".js",{cwd:__dirname,stdio:["ignore","pipe","ignore"]}).toString());
  const sandbox={};sandbox.globalThis=sandbox;files.forEach(code=>new Function("globalThis","module",code)(sandbox,undefined));legacy=sandbox.Tactics;
 }catch(e){}
 const T=loadEngine();
@@ -26,7 +28,7 @@ test("un mapa hecho con comandos clásicos compila igual que en la v0.2.0",{skip
 test("las notas JSON de F9 se leen igual que en la v0.2.0",{skip:!legacy&&"sin acceso al código original (git)"},()=>{
  const notes={classes:{2:'<Tactics>{"moveType":"mounted","promotions":[3]}</Tactics>'},weapons:{2:'<Tactics>{"minRange":2,"maxRange":2,"effective":["flying"]}</Tactics>'},skills:{1:'<Tactics>{"effects":[{"type":"steal"}]}</Tactics>'}};
  // readDatabase vivía en TacticsMZ.js (dependiente de MZ); se extrae su función para compararla.
- const src=execSync("git show "+(process.env.LEGACY_REF||"18ffd17")+":plugins/TacticsMZ.js",{cwd:__dirname}).toString();
+ const src=execSync("git show "+legacyRef()+":plugins/TacticsMZ.js",{cwd:__dirname}).toString();
  const body=src.slice(src.indexOf("function note(row){"),src.indexOf("T.audioBridge="));
  const sandbox={Tactics:legacy};new Function("root","const T=root.Tactics;"+body)(sandbox);
  assert.deepEqual(T.readDatabase(mzDatabase(notes)),legacy.readDatabase(mzDatabase(notes)));
