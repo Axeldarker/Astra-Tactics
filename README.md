@@ -12,7 +12,13 @@ Plugins de **RPG Maker MZ** para crear juegos tácticos por turnos (estilo *Fire
 
 ¿Vienes de la v0.2 (9 plugins)? Lee la sección 0 de [docs/ANTES_Y_DESPUES.md](docs/ANTES_Y_DESPUES.md).
 
-## Tu primera misión en 3 pasos
+## Astra Editor ✦
+
+**`dist/AstraEditor.html`** es un editor visual de misiones: doble clic, se abre en Chrome o Edge, eliges la carpeta de tu proyecto MZ y colocas enemigos, aliados, cofres, aldeas, refuerzos y terreno **con un clic sobre tu mapa real**. Ves el alcance de cada unidad y un semáforo te dice si la misión funciona. No hay que instalar nada.
+
+Guía completa: **[docs/ASTRA_EDITOR.md](docs/ASTRA_EDITOR.md)**.
+
+## Tu primera misión en 3 pasos (desde MZ, sin Astra)
 
 1. **Evento A** → `★ Aliado`: elige el personaje y marca *Es el líder*.
 2. **Eventos B, C, D…** → `★ Enemigo`: elige clase y nivel.

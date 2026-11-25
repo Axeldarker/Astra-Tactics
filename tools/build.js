@@ -59,7 +59,17 @@ function build(){
  return {"TacticsEngine.js":engine,"TacticsUI.js":uiCode,"TacticsMZ.js":mz};
 }
 
-const out=build(),check=process.argv.includes("--check");let stale=false;
+// Astra Editor: un solo HTML con el motor, el modelo del editor y los 3 plugins (para instalarlos/actualizarlos).
+function buildEditor(plugins){
+ const safe=code=>code.replace(/<\/script/gi,"<\\/script");
+ const engine=plugins["TacticsEngine.js"].replace(/^\/\*:[\s\S]*?\*\/\n/m,"");
+ const editor=files("editor").map(f=>strip(read(f))).join("\n");
+ const app=["project.js","tilemap.js","app.js"].map(f=>read(path.join(SRC,"app",f))).join("\n");
+ const bundle="window.ASTRA_PLUGINS="+JSON.stringify(plugins)+";\nwindow.ASTRA_VERSION="+JSON.stringify(pkg.version)+";\n";
+ return read(path.join(SRC,"app","shell.html")).replace("/*CSS*/",()=>read(path.join(SRC,"app","style.css")))
+  .replace("/*ENGINE*/",()=>safe(engine)).replace("/*EDITOR*/",()=>safe(editor)).replace("/*APP*/",()=>safe(bundle+app));
+}
+const out=build();out["AstraEditor.html"]=buildEditor(Object.assign({},out));let stale=false;const check=process.argv.includes("--check");
 if(!check&&!fs.existsSync(DIST))fs.mkdirSync(DIST);
 Object.keys(out).forEach(name=>{const file=path.join(DIST,name),old=fs.existsSync(file)?fs.readFileSync(file,"utf8"):null;
  if(check){if(old!==out[name]){stale=true;console.error("Desactualizado: dist/"+name);}}

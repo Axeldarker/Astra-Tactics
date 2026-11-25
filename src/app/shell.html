@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Astra Editor</title>
+<style>/*CSS*/</style>
+</head>
+<body>
+<div id="app">
+ <header id="top">
+  <div class="logo"><i>✦</i>ASTRA</div>
+  <div class="sep"></div>
+  <select id="mapSelect" title="Mapa que estás editando"></select>
+  <button class="btn" id="missionBtn" title="Victoria, título, oro, mapa siguiente…">⚑ Misión</button>
+  <div class="sep"></div>
+  <button class="btn small" id="undoBtn" title="Deshacer (Ctrl+Z)">↶</button>
+  <button class="btn small" id="redoBtn" title="Rehacer (Ctrl+Y)">↷</button>
+  <div class="grow"></div>
+  <div class="light" id="light" title="Estado de la misión. Haz clic para ver detalles."><b></b><span>—</span></div>
+  <button class="btn gold" id="saveBtn" title="Guardar en el proyecto (Ctrl+S)">💾 Guardar</button>
+  <button class="btn small" id="helpBtn" title="Ayuda y atajos">?</button>
+ </header>
+ <nav id="palette"></nav>
+ <section id="viewport">
+  <div id="viewbar">
+   <button data-view="game" title="Imagen del mapa del paquete de gráficos, como en el juego">Juego</button>
+   <button data-view="tiles" title="Tiles del editor de MZ">Tiles MZ</button>
+   <button data-toggle="terrain" title="Ver el terreno táctico (regiones). T">Terreno</button>
+   <button data-toggle="grid" title="Cuadrícula. G">Cuadrícula</button>
+   <button data-zoom="-1" title="Alejar (−)">−</button>
+   <button data-zoom="1" title="Acercar (+)">+</button>
+  </div>
+  <div id="stage"><canvas id="base"></canvas><canvas id="overlay"></canvas></div>
+ </section>
+ <aside id="inspector"><div class="scroll" id="inspectorBody"></div></aside>
+ <footer id="status"><span id="statusTile">—</span><span id="statusHint"></span><span class="grow"></span><span id="statusZoom"></span><span id="statusProject"></span></footer>
+</div>
+<div id="tooltip" class="hidden"></div>
+<div id="toast"></div>
+<div class="overlay" id="welcome">
+ <div class="welcome">
+  <div class="big">✦</div>
+  <h1>ASTRA EDITOR</h1>
+  <p class="lead">El editor de misiones tácticas para tu proyecto de RPG Maker MZ.</p>
+  <div id="welcomeActions"></div>
+  <p class="error" id="welcomeError"></p>
+  <div class="steps">
+   <div><b>1 · Abre tu proyecto</b>La carpeta donde está <code>game.rmmzproject</code>.</div>
+   <div><b>2 · Coloca con un clic</b>Enemigos, aliados, cofres, aldeas… directamente en tu mapa.</div>
+   <div><b>3 · Guarda y juega</b>Se guardan como eventos normales de MZ. Abre el proyecto en MZ y prueba.</div>
+  </div>
+  <p class="lead" id="browserNote"></p>
+ </div>
+</div>
+<div class="overlay dim hidden" id="modal"><div class="modal" id="modalBody"></div></div>
+<script>/*ENGINE*/</script>
+<script>/*EDITOR*/</script>
+<script>/*APP*/</script>
+</body>
+</html>

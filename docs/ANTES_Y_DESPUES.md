@@ -299,8 +299,11 @@ dist/            los 3 plugins que se copian al proyecto
 
 ---
 
-## 12. Siguientes ideas (no incluidas todavía)
+## 12. Y además: Astra Editor
+
+Todo lo anterior también se puede hacer **sin abrir el editor de eventos de MZ**, con el editor visual `dist/AstraEditor.html`: eliges una herramienta, haces clic en el mapa y listo. Guía en [ASTRA_EDITOR.md](ASTRA_EDITOR.md).
+
+## 13. Siguientes ideas (no incluidas todavía)
 
 - **Tipos de arma por nombre:** leer los nombres de *Tipos → Tipos de arma* de MZ (Espada, Lanza…) para que el triángulo de armas funcione sin etiquetas. Ahora mismo, sin la etiqueta `<Armas: …>`, los tipos se guardan con su número de MZ y el triángulo no los reconoce. No lo activé porque cambiaría los dominios de armas de partidas guardadas.
-- **Comando "Revisar mapa"**, que liste los problemas de una misión (enemigos sin arma, refuerzos fuera de los límites…) antes de jugarla.
 - **Ordenar la interfaz:** TacticsUI sigue siendo el código original reempaquetado. Se puede dividir y limpiar más adelante, ahora que hay pruebas que protegen el motor.
