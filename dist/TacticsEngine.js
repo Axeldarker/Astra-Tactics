@@ -1238,6 +1238,7 @@ T.noteAliases=ALIASES;
 const mergeInto=(target,patch)=>{Object.keys(patch).forEach(k=>{const v=patch[k];if(v===undefined)return;
  if(isMerge(k)||k==="promotionBonus"||k==="ranks")target[k]=Object.assign({},target[k],v);
  else if(k==="effects")target[k]=(target[k]||[]).concat(v);else target[k]=v;});return target;};
+T.notes.merge=mergeInto;
 
 // Una entrada "clave: valor". Primero busca un alias de la tabla; si no, usa la clave tal cual (inglés del motor).
 // Fuera del bloque <Tactics> solo se aceptan alias conocidos: las etiquetas de otros plugins se ignoran.

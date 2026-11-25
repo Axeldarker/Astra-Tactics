@@ -13,6 +13,7 @@
   <div class="sep"></div>
   <select id="mapSelect" title="Mapa que estás editando"></select>
   <button class="btn" id="missionBtn" title="Victoria, título, oro, mapa siguiente…">⚑ Misión</button>
+  <button class="btn" id="dbBtn" title="Personajes, clases, armas, objetos, terrenos, animaciones…">📚 Base de datos</button>
   <div class="sep"></div>
   <button class="btn small" id="undoBtn" title="Deshacer (Ctrl+Z)">↶</button>
   <button class="btn small" id="redoBtn" title="Rehacer (Ctrl+Y)">↷</button>
@@ -52,6 +53,10 @@
   </div>
   <p class="lead" id="browserNote"></p>
  </div>
+</div>
+<div class="dbwin hidden" id="dbWin">
+ <header class="dbhead"><div class="logo"><i>✦</i>BASE DE DATOS</div><span class="dbhint" id="dbHint"></span><span class="grow"></span><button class="btn" id="dbSave" title="Guardar (Ctrl+S)">💾 Guardado</button><button class="btn" id="dbClose" title="Volver al mapa (Esc)">✕ Cerrar</button></header>
+ <nav id="dbTabs"></nav><section id="dbList"></section><section id="dbForm"></section>
 </div>
 <div class="overlay dim hidden" id="modal"><div class="modal" id="modalBody"></div></div>
 <script>/*ENGINE*/</script>

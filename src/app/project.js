@@ -62,6 +62,7 @@ Astra.loadProject=async function(backend){
  Tactics.setEnemyPresets(Tactics.decode(p.tacticsParams.EnemyPresets||"[]")||[]);
  // Paquete de gráficos (opcional): terrenos con nombre, imagen de cada mapa y sprites de clase.
  const pack=String(p.tacticsParams.ResourcePack||"");
+ p.packName=pack||null;
  p.pack=pack&&/^[a-zA-Z0-9_/-]+$/.test(pack)?await json(backend,"data/"+pack+".json",true):null;
  p.terrain=(p.pack&&p.pack.terrain)||Tactics.copy(Tactics.exampleDatabase.terrain);
  // Tablas de autotiles: se leen del propio rmmz_core.js del proyecto.

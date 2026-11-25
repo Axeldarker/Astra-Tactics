@@ -19,9 +19,11 @@ Lo que colocas se guarda como **eventos normales de MZ** con los comandos ★ de
 9. [Guardar y probar en MZ](#9-guardar-y-probar-en-mz)
 10. [Actualizar los plugins desde Astra](#10-actualizar-los-plugins-desde-astra)
 11. [Plantillas de enemigo](#11-plantillas-de-enemigo)
-12. [Atajos de teclado](#12-atajos-de-teclado)
-13. [Problemas frecuentes](#13-problemas-frecuentes)
-14. [Para desarrolladores](#14-para-desarrolladores)
+12. [Base de datos](#12-base-de-datos)
+13. [Animaciones de batalla y sprites (FE Essentials)](#13-animaciones-de-batalla-y-sprites-fe-essentials)
+14. [Atajos de teclado](#14-atajos-de-teclado)
+15. [Problemas frecuentes](#15-problemas-frecuentes)
+16. [Para desarrolladores](#16-para-desarrolladores)
 
 ---
 
@@ -89,9 +91,9 @@ Lo que colocas se guarda como **eventos normales de MZ** con los comandos ★ de
 | **⏱T3** | Refuerzo: llega en el turno 3 (`T3↻2` = turno 3 y cada 2; `S5` = al activar el interruptor 5) |
 | **plantilla** | Unidad clásica marcada como plantilla de refuerzo |
 | **💬** | Se puede reclutar hablando |
-| C, P, V, T | Cofre, Puerta, Aldea, Tienda |
-| ★ | Casilla de conquista |
-| Casilla celeste con borde de rayas | Casilla de despliegue |
+| 🧰 🚪 🏠 🏪 | Cofre, Puerta, Aldea (casa de tejado rojo), Tienda (tejado azul con moneda). Si el evento tiene su propio gráfico en MZ (por ejemplo `!Chest`), se dibuja ese |
+| 🚩 bandera roja | Casilla de conquista |
+| Casilla celeste con borde de rayas y 🏳 azul | Casilla de despliegue |
 | Cuadro de rayas blancas | Un evento normal de MZ (un NPC, por ejemplo). Astra no lo toca. |
 
 Si eliges una unidad, verás su **alcance**: en **azul** dónde puede moverse y en **rojo** dónde puede atacar (en **verde** si lleva bastón). Se calcula con el motor real del juego, teniendo en cuenta su clase, su arma y el terreno.
@@ -223,19 +225,71 @@ Los archivos antiguos (`TacticsSystem.js`, etc.) se quedan en la carpeta pero ya
 
 Las plantillas te permiten definir un tipo de enemigo una vez (por ejemplo, *Bandido: Bárbaro nivel 4 con hacha*) y usarlo por nombre.
 
-- Se crean en RPG Maker MZ: **Administrador de plugins → TacticsMZ → Plantillas de enemigo**.
+- Se crean en **📚 Base de datos → Enemigos rápidos** (o en MZ: *Administrador de plugins → TacticsMZ → Plantillas de enemigo*; es el mismo dato).
 - En Astra, el campo **Plantilla** de un enemigo te sugiere las que existen mientras escribes.
 - Lo que pongas en el propio enemigo (nivel, arma…) manda sobre la plantilla.
 
 ---
 
-## 12. Atajos de teclado
+## 12. Base de datos
+
+El botón **📚 Base de datos** (arriba) abre una ventana con una pestaña por cada cosa del juego. A la izquierda eliges qué editar; en el centro, la lista (con buscador, **＋ Nuevo** y **⧉ Duplicar**); a la derecha, la ficha.
+
+| Pestaña | Qué editas | Dónde se guarda |
+|---|---|---|
+| 🧑 Personajes | Nombre, clase, nivel, perfil, variante, color, frase al caer, estadísticas y crecimientos propios (vacío = los de la clase), inventario y habilidades | `data/Actors.json` |
+| 🛡 Clases | Tipo de movimiento, niveles, estadísticas, crecimientos, bono al promocionar, armas que usa y rango, **animación de batalla por arma**, **sprite de mapa**, promociones, habilidades y las que aprende por nivel, inventario de los enemigos de esa clase | `data/Classes.json` |
+| ⚔ Armas | Tipo, poder, golpe, crítico, peso, usos, alcance, rango, golpes, mágica, eficaz contra, bastón, hechizo, estado que causa | `data/Weapons.json` |
+| 🧪 Objetos | Qué hace (curar, llave, promocionar, subir estadística…), potencia, usos, precio, accesorio | `data/Items.json` |
+| ✨ Habilidades / ☠ Estados | Lista de efectos (robar, drenar, veneno, +stat…) con su probabilidad o valor | `data/Skills.json`, `data/States.json` |
+| 🌲 Terrenos | Nombre, color, coste, defensa, evasión, curación y coste por tipo de movimiento. **＋ Nuevo** usa la siguiente región libre | paquete de gráficos |
+| 🥾 Tabla de movimiento | Todos los terrenos contra todos los tipos de movimiento en una sola tabla (como en Lex Talionis). Rojo = no puede pasar | paquete de gráficos |
+| 🎨 Colores de equipo | El color que sustituye a cada color original para Jugador, Enemigo, Otro… con vista previa | paquete de gráficos |
+| 👾 Enemigos rápidos | Las plantillas de ★ Enemigo | `js/plugins.js` |
+| 🎞 Animaciones | Todas las animaciones de batalla, con reproductor (normal, crítico, fallo, cámara lenta) y qué clases las usan | paquete de gráficos |
+
+**Cómo se guarda.** Igual que el mapa: botón **💾 Guardar** de la ventana (o `Ctrl+S`), con copia `.astra-bak` la primera vez y la misma regla de oro (cierra MZ o vuelve a abrir el proyecto después). Los datos tácticos se escriben en la **Nota** de F9 como bloque `<Tactics>{…}</Tactics>`; si ya tenías texto u otras etiquetas en la nota, se conservan. Lo que tenías con etiquetas cortas (`<Mov: 7>`) se pasa al bloque sin cambiar su valor.
+
+**Paquete de gráficos.** Terrenos, colores, sprites y animaciones viven en el paquete de gráficos (`data/TacticsGraphics.json` en tu proyecto). Si un proyecto no tiene, Astra crea `data/AstraGraphics.json` y lo pone en el parámetro *Paquete de gráficos* de TacticsMZ.
+
+**IDs.** RPG Maker necesita IDs seguidos, así que *Nuevo* siempre añade al final. Para "borrar", reutiliza la fila: cámbiale el nombre y los datos.
+
+---
+
+## 13. Animaciones de batalla y sprites (FE Essentials)
+
+En **📚 Base de datos → 🎞 Animaciones → 📤 Importar animación** puedes traer animaciones de tres formas (o arrastrarlas a la ventana):
+
+1. **Paquete de FE Essentials / FE Repo / FEBuilder** ([feessentials.com](https://feessentials.com/)). Elige el **.zip** tal cual lo descargas, la **carpeta** descomprimida o el **script .txt junto con sus PNG**. Astra lee el script (`/// - Mode 1`, `3 p- frame.png`, `C1A`…), así que **el orden, la duración y el momento del golpe ya vienen hechos**:
+   - Modo 1 → *Normal*, modo 3 → *Crítico*, modo 12 → *Fallo*.
+   - Si trae ataque a distancia (modos 5 y 6), crea también `Nombre-distancia` y lo asigna para cuando ataca de lejos.
+   - El color de fondo de cada fotograma se vuelve transparente. Los fotogramas "perforantes" (dos mitades) se combinan.
+   - `C01` después del golpe (en GBA, la espera mientras baja la vida) se convierte en una pausa de 20/60 s.
+2. **Hoja de sprites PNG** en rejilla (como las de `img/feh/Animations` de tu proyecto, celdas de 192×192). Astra adivina el tamaño de celda, ignora las celdas vacías y tú haces clic en los fotogramas en el orden que quieras.
+3. Cualquier mezcla: después de cargar puedes quitar, añadir o reordenar fotogramas, cambiar la duración de cada uno (en 1/60 s) y mover el golpe ⚡.
+
+**Revisa los pies.** La vista previa dibuja la animación exactamente como la batalla de TacticsMZ, sobre su plataforma y al lado de un rival de referencia. Si flota o se hunde, cambia **Pies Y** (la línea roja de la hoja marca dónde están). **Escala** agranda o encoge animaciones de otro tamaño.
+
+**Asígnala.** En la misma ventana elige *Clase* y *Con arma*, o hazlo después en **Clases → Armas y animaciones de batalla** (con ▶ para verla). Al guardar, Astra crea un atlas recortado en `img/astra/battle/Nombre.png` y las pistas `Nombre:normal`, `Nombre:critical` y `Nombre:miss` en el paquete de gráficos.
+
+**Sprites de mapa.** En **Clases → Sprite de mapa → 📤 Subir sprite** eliges el PNG del sprite de mapa:
+- Formato GBA / FE Essentials (tira vertical de 3 fotogramas de 16×16 o 32×32): Astra lo convierte al formato de TacticsMZ.
+- Rejillas de 3 columnas como las de tu proyecto (`MapMyrmidonM.png`, 192×144): se usan tal cual.
+
+Se guarda en `img/astra/map/` y se asigna a la clase. La vista previa lo muestra con los colores de cada equipo. Los sprites con la paleta GBA estándar se recolorean solos (rojo para enemigos, verde para otros).
+
+> Los recursos de FE Essentials son F2U (gratis para juegos fan, **sin uso comercial**) y piden crédito a sus autores. Copia los créditos desde la página de cada recurso.
+
+---
+
+## 14. Atajos de teclado
 
 | Atajo | Acción |
 |---|---|
 | `1` … `0` | Cambiar de herramienta |
 | `Ctrl+Z` / `Ctrl+Y` (o `Ctrl+Shift+Z`) | Deshacer / rehacer (hasta 150 pasos) |
-| `Ctrl+S` | Guardar |
+| `Ctrl+S` | Guardar (en la base de datos, guarda la base de datos) |
+| `Esc` en la base de datos | Volver al mapa |
 | `Supr` / `Retroceso` | Borrar lo elegido |
 | `Esc` | Soltar la selección (o salir de un campo de texto) |
 | `T` | Ver u ocultar el terreno |
@@ -246,7 +300,7 @@ Las plantillas te permiten definir un tipo de enemigo una vez (por ejemplo, *Ban
 
 ---
 
-## 13. Problemas frecuentes
+## 15. Problemas frecuentes
 
 **"Este navegador no permite abrir carpetas."**
 Usa Google Chrome o Microsoft Edge.
@@ -261,7 +315,10 @@ MZ tiene el proyecto en memoria. Vuelve a abrirlo (*Archivo → Abrir proyecto*)
 Falta `js/rmmz_core.js` en el proyecto. Astra lee de ahí las reglas de los autotiles.
 
 **Mis unidades se ven como círculos con letras en vez de sprites.**
-La clase no tiene `art` en su nota de F9 o el paquete de gráficos no tiene ese sprite. Los aliados con gráfico de personaje en F9 usan ese gráfico.
+La clase no tiene sprite de mapa. Ponle uno en **📚 Base de datos → Clases → Sprite de mapa** (o súbelo). Los aliados con gráfico de personaje en F9 usan ese gráfico.
+
+**Importé una animación de FE y dice que no encuentra el script.**
+El .zip o la carpeta tiene que incluir el `.txt` con las líneas `/// - Mode 1` y `3 p- frame.png`. Si solo tienes los PNG sueltos o un GIF, usa *Hoja de sprites* (o junta los PNG en una hoja).
 
 **El semáforo está en rojo.**
 Haz clic en él: el mensaje dice exactamente qué falla y es el mismo error que daría el juego.
@@ -271,15 +328,19 @@ Chrome perdió el permiso de la carpeta. Recarga la página y usa *↻ Reabrir*:
 
 ---
 
-## 14. Para desarrolladores
+## 16. Para desarrolladores
 
 ### Archivos
 
 ```
 src/editor/01_Model.js   Modelo: leer/escribir eventos ★ en el JSON de un mapa. Sin DOM: se prueba en Node.
+src/editor/02_Database.js Base de datos: notas F9, filas nuevas de MZ, plantillas, scripts de FE, atlas y pistas.
 src/app/project.js       Acceso al proyecto (carpeta o HTTP), plugins.js, paquete de gráficos, copias de seguridad.
 src/app/tilemap.js       Dibujo del mapa con las reglas de Tilemap de MZ (las tablas se leen de rmmz_core.js).
+src/app/icons.js         Iconos pixel-art propios, IconSet, iconos del paquete, sprites recoloreados y retratos.
 src/app/app.js           Interfaz: paleta, mapa, inspector, historial, teclado.
+src/app/anim.js          Reproductor de animaciones, importador (hoja PNG / FE Essentials / .zip) y sprites de mapa.
+src/app/database.js      Ventana Base de datos.
 src/app/style.css        Estilos.
 src/app/shell.html       Plantilla. tools/build.js mete dentro el motor, el modelo, la app y los 3 plugins.
 dist/AstraEditor.html    Resultado: un único archivo.

@@ -18,6 +18,8 @@ Plugins de **RPG Maker MZ** para crear juegos tácticos por turnos (estilo *Fire
 
 **`dist/AstraEditor.html`** es un editor visual de misiones: doble clic, se abre en Chrome o Edge, eliges la carpeta de tu proyecto MZ y colocas enemigos, aliados, cofres, aldeas, refuerzos y terreno **con un clic sobre tu mapa real**. Ves el alcance de cada unidad y un semáforo te dice si la misión funciona. No hay que instalar nada.
 
+También trae una **📚 Base de datos** estilo Lex Talionis (clases, personajes, armas, objetos, terrenos, tabla de movimiento, colores de equipo…) y un **importador de animaciones de batalla** que lee directamente los paquetes de [FE Essentials](https://feessentials.com/) / FEBuilder (.zip o carpeta) y hojas PNG.
+
 Guía completa: **[docs/ASTRA_EDITOR.md](docs/ASTRA_EDITOR.md)**.
 
 ## Tu primera misión en 3 pasos (desde MZ, sin Astra)

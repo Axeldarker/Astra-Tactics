@@ -1,6 +1,10 @@
 # Cambios
 
 ## 0.3.0
+- **Base de datos en Astra** (botón 📚): personajes, clases, armas, objetos, habilidades, estados, terrenos, tabla de movimiento, colores de equipo, enemigos rápidos y animaciones, con iconos, retratos y sprites. Guarda en F9 (nota `<Tactics>`), en el paquete de gráficos y en plugins.js.
+- **Importador de animaciones de batalla**: paquetes de FE Essentials / FE Repo / FEBuilder (.zip, carpeta o script .txt + PNG, con orden, duraciones y golpe del script) y hojas PNG en rejilla. Vista previa igual que la batalla.
+- **Sprites de mapa**: subir PNG (formato GBA de 3 fotogramas o rejilla) y asignarlo a una clase.
+- Iconos pixel-art en el mapa y en la paleta: casas, tiendas, cofres, puertas, banderas.
 - **Astra Editor** (`dist/AstraEditor.html`): editor visual de misiones en un solo archivo. Dibuja el mapa real (tiles de MZ o imagen del juego), coloca unidades e interacciones con un clic, pinta terreno, muestra el alcance, revisa la misión en vivo, deshace y rehace, guarda con copia de seguridad y actualiza los plugins del proyecto. Guía: docs/ASTRA_EDITOR.md.
 - De 9 plugins a 3: TacticsEngine, TacticsUI y TacticsMZ, generados desde `src/` con `tools/build.js`.
 - Comandos rápidos: ★ Enemigo, ★ Aliado, ★ Refuerzo, ★ Cofre, ★ Puerta, ★ Aldea, ★ Tienda y ★ Reclutable.

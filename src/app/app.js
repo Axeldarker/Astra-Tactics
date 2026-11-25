@@ -15,6 +15,8 @@ const TOOLS=Object.assign({select:{label:"Elegir",letter:"↖",color:"#93aaad",h
 const S={project:null,mapId:0,map:null,tileset:null,undo:[],redo:[],dirty:false,tool:"select",selected:0,brush:1,
  view:{bg:"game",terrain:false,grid:true},zoom:1,hover:null,drag:null,painting:false,last:{},preview:null,check:null};
 Astra.state=S;
+// Para database.js: refrescar todo después de tocar la base de datos.
+Astra.ui={esc,toast:(...a)=>toast(...a),modal:(...a)=>modal(...a),refresh(){Object.keys(spriteCache).forEach(k=>delete spriteCache[k]);Astra.clearArtCache();S.project.terrainColors=null;S.preview=null;if(S.map)renderAll();}};
 
 // ---------- utilidades de interfaz ----------
 function toast(text){const t=$("toast");t.textContent=text;t.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove("show"),2600);}
@@ -118,7 +120,7 @@ function renderTop(){
  document.querySelectorAll("#viewbar [data-toggle]").forEach(b=>b.classList.toggle("on",!!S.view[b.dataset.toggle]));
 }
 function renderPalette(){
- $("palette").innerHTML=TOOL_ORDER.map((k,i)=>{const t=TOOLS[k];return (k==="terrain"?`<div class="tool-sep"></div>`:"")+`<button class="tool${S.tool===k?" on":""}" data-tool="${k}" title="${esc(t.hint)}"><kbd>${i<10?(i+1)%10:""}</kbd><span class="ico" style="background:${t.color}">${esc(t.letter)}</span>${esc(t.label)}</button>`;}).join("");
+ $("palette").innerHTML=TOOL_ORDER.map((k,i)=>{const t=TOOLS[k];return (k==="terrain"?`<div class="tool-sep"></div>`:"")+`<button class="tool${S.tool===k?" on":""}" data-tool="${k}" title="${esc(t.hint)}"><kbd>${i<10?(i+1)%10:""}</kbd>${Astra.PIXEL[k]?`<span class="ico pix" style="--c:${t.color}"><img src="${Astra.pixelUrl(k,32)}" alt=""></span>`:`<span class="ico" style="background:${t.color}">${esc(t.letter)}</span>`}${esc(t.label)}</button>`;}).join("");
  $("statusHint").textContent=TOOLS[S.tool].hint;
 }
 function setTool(k){S.tool=k;if(k==="terrain")S.view.terrain=true;renderAll();}
@@ -201,17 +203,14 @@ async function sprite(classId,actorId,team){
  if(a&&a.characterName){const im=await Astra.image(p,"img/characters/"+a.characterName+".png");if(im){const big=a.characterName[0]==="$"||a.characterName.slice(0,2)==="!$";const cw=im.width/(big?3:12),ch=im.height/(big?4:8),i=big?0:a.characterIndex;return crop({im,sx:((i%4)*3+1)*cw,sy:Math.floor(i/4)*4*ch,w:cw,h:ch});}}
  return null;
 }
-// Recorta el primer fotograma a lo que tiene píxeles (los sprites traen mucho margen) y, si el paquete
-// de gráficos define paleta por equipos, lo pinta con el color del equipo, como en la batalla.
-function crop(s,palette,team){
- try{const c=new OffscreenCanvas(s.w,s.h),x=c.getContext("2d");x.drawImage(s.im,s.sx,s.sy,s.w,s.h,0,0,s.w,s.h);const d=x.getImageData(0,0,s.w,s.h).data;
-  let x0=s.w,y0=s.h,x1=-1,y1=-1;for(let y=0;y<s.h;y++)for(let i=0;i<s.w;i++)if(d[(y*s.w+i)*4+3]>8){if(i<x0)x0=i;if(i>x1)x1=i;if(y<y0)y0=y;if(y>y1)y1=y;}
-  if(x1<0)return s;
-  const map=palette&&palette.source&&palette.teams&&palette.teams[team]?new Map(palette.source.map((c,i)=>[c.join(","),palette.teams[team][i]])):null;
-  if(map){const img=x.getImageData(0,0,s.w,s.h),p=img.data;for(let i=0;i<p.length;i+=4){if(!p[i+3])continue;const to=map.get(p[i]+","+p[i+1]+","+p[i+2]);if(to){p[i]=to[0];p[i+1]=to[1];p[i+2]=to[2];}}x.putImageData(img,0,0);}
-  return {im:c,sx:x0,sy:y0,w:x1-x0+1,h:y1-y0+1};}catch(e){return s;}
-}
+const crop=Astra.crop;
 const spriteCache={};
+// Gráfico propio del evento en MZ (por ejemplo !Chest): si lo tiene, se dibuja ese; si no, el icono pixel-art.
+function eventGraphic(e){
+ const img=((e.pages||[])[0]||{}).image||{};if(!img.characterName)return null;const key="ev:"+img.characterName+":"+img.characterIndex+":"+img.direction+":"+img.pattern;
+ if(!(key in spriteCache)){spriteCache[key]=null;Astra.characterSprite(S.project,img.characterName,img.characterIndex,img.direction,img.pattern).then(s=>{spriteCache[key]=s;drawOverlay();});}
+ return spriteCache[key];
+}
 function spriteFor(m,e){
  const c=M.commands(e).find(c=>["Enemy","Ally","Unit"].indexOf(c.id)>=0);if(!c)return null;
  const eng=preview().engine,u=eng&&eng.unit(e.id);
@@ -246,11 +245,13 @@ function drawOverlay(){
   const unit=m.kind==="enemy"||m.kind==="ally",sp=unit?spriteFor(m,e):null;
   if(unit){ctx.fillStyle=m.color+"55";ctx.beginPath();ctx.ellipse(cx,y+tw*.78,tw*.38,tw*.16,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle=m.color;ctx.lineWidth=2;ctx.stroke();}
   else if(m.kind==="deploy"){ctx.fillStyle=m.color+"40";ctx.fillRect(x+1,y+1,tw-2,tw-2);ctx.strokeStyle=m.color;ctx.lineWidth=1.5;ctx.setLineDash([5,3]);ctx.strokeRect(x+2,y+2,tw-4,tw-4);ctx.setLineDash([]);}
-  else{ctx.fillStyle=m.color+"33";ctx.fillRect(x+3,y+3,tw-6,tw-6);ctx.strokeStyle=m.color;ctx.lineWidth=2;ctx.strokeRect(x+3,y+3,tw-6,tw-6);}
+  else{ctx.fillStyle="rgba(0,0,0,.28)";ctx.beginPath();ctx.ellipse(cx,y+tw*.86,tw*.36,tw*.1,0,0,Math.PI*2);ctx.fill();}
   const covered=m.kind==="deploy"&&M.markers(S.map).some(o=>o!==m&&o.x===m.x&&o.y===m.y);
   if(sp){const s=Math.min(tw*.95/sp.w,tw*.95/sp.h),dw=sp.w*s,dh=sp.h*s;ctx.drawImage(sp.im,sp.sx,sp.sy,sp.w,sp.h,cx-dw/2,y+tw*.9-dh,dw,dh);}
-  else if(m.kind==="deploy"){if(!covered){ctx.fillStyle=m.color;ctx.font="bold 12px sans-serif";ctx.textAlign="left";ctx.textBaseline="top";ctx.fillText("D",x+5,y+4);}}
-  else{const r=tw*.3;ctx.beginPath();ctx.arc(cx,y+tw/2,r,0,Math.PI*2);ctx.fillStyle=m.color;ctx.fill();ctx.lineWidth=2;ctx.strokeStyle="#081419";ctx.stroke();ctx.fillStyle="#081419";ctx.font="bold "+Math.round(r*1.15)+"px sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(m.letter,cx,y+tw/2+1);}
+  else if(m.kind==="deploy"){if(!covered)ctx.drawImage(Astra.pixel("deploy"),x+3,y+3,tw*.42,tw*.42);}
+  else{const own=eventGraphic(e),icon=Astra.pixel(m.kind);
+   if(own){const s=Math.min(tw/own.w,tw/own.h),dw=own.w*s,dh=own.h*s;ctx.drawImage(own.im,own.sx,own.sy,own.w,own.h,cx-dw/2,y+tw*.92-dh,dw,dh);}
+   else if(icon)ctx.drawImage(icon,x+tw*.08,y+tw*.02,tw*.84,tw*.84);}
   ctx.textBaseline="alphabetic";ctx.font="bold 11px sans-serif";ctx.lineWidth=3;ctx.strokeStyle="#081419";
   const tag=(text,tx,ty,color,align)=>{ctx.textAlign=align;ctx.strokeText(text,tx,ty);ctx.fillStyle=color;ctx.fillText(text,tx,ty);};
   if(m.level)tag(String(m.level),x+tw-3,y+tw-3,"#ffffff","right");
@@ -268,6 +269,7 @@ function drawHero(){
  const sp=m&&(m.kind==="enemy"||m.kind==="ally")?spriteFor(m,e):null,color=m?m.color:"#d2b567";
  ctx.fillStyle=color+"33";ctx.beginPath();ctx.arc(36,36,32,0,Math.PI*2);ctx.fill();
  if(sp){const s=Math.min(64/sp.w,64/sp.h);ctx.drawImage(sp.im,sp.sx,sp.sy,sp.w,sp.h,36-sp.w*s/2,36-sp.h*s/2,sp.w*s,sp.h*s);}
+ else if(m&&Astra.pixel(m.kind))ctx.drawImage(Astra.pixel(m.kind),8,8,56,56);
  else{ctx.fillStyle=color;ctx.font="bold 30px sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(m?m.letter:"⚑",36,38);}
 }
 
@@ -331,6 +333,7 @@ function onInspectorChange(ev){
 
 // ---------- teclado ----------
 function onKey(ev){
+ if(Astra.dbState&&Astra.dbState.open)return;
  if(!S.map||!$("modal").classList.contains("hidden"))return;
  const typing=/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName),k=ev.key,ctrl=ev.ctrlKey||ev.metaKey;
  if(ctrl&&k.toLowerCase()==="s"){ev.preventDefault();save();return;}
@@ -363,7 +366,7 @@ function boot(){
  $("light").onclick=()=>{if(S.check)modal(`<h2>Revisión de la misión</h2>${S.check.ok?`<p>✔ La misión compila correctamente con TacticsMZ.</p><p class="help">Título: <b>${esc(S.check.summary.title)}</b> · Victoria: <b>${esc(OBJECTIVES[S.check.summary.objective]||S.check.summary.objective)}</b><br>${S.check.summary.allies} aliados · ${S.check.summary.foes} enemigos · ${S.check.summary.reinforcements} refuerzos · ${S.check.summary.interactions} cofres/puertas/aldeas/tiendas · ${S.check.summary.goals} casillas de conquista</p>`:`<p class="error">✖ ${esc(S.check.error)}</p>`}${S.check.warnings.map(w=>`<p>⚠ ${esc(w)}</p>`).join("")}`,[{label:"Cerrar",value:0}]);};
  $("helpBtn").onclick=()=>modal(`<h2>Ayuda rápida</h2><p>Elige una herramienta a la izquierda y haz clic en el mapa. Lo que colocas son <b>eventos normales de MZ</b> con los comandos ★ de TacticsMZ: después puedes abrirlos en el editor de MZ.</p>${emptyHtml().replace(/<div class="card empty">[\s\S]*?<\/div>/,"")}<p class="help">Guía completa: docs/ASTRA_EDITOR.md</p>`,[{label:"Cerrar",value:0}]);
  document.addEventListener("keydown",onKey);
- window.addEventListener("beforeunload",ev=>{if(S.dirty){ev.preventDefault();ev.returnValue="";}});
+ window.addEventListener("beforeunload",ev=>{if(S.dirty||(Astra.dbState&&Astra.dbState.dirty.size)){ev.preventDefault();ev.returnValue="";}});
  welcome();
 }
 boot();
