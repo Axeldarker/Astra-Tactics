@@ -1,0 +1,12 @@
+{
+  "name": "tacticsmz",
+  "version": "0.3.0",
+  "description": "Plugins de RPG Maker MZ para crear juegos tácticos por turnos con comandos de evento.",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "build": "node tools/build.js",
+    "check": "node tools/build.js --check",
+    "test": "node --test test/*.test.js"
+  }
+}
