@@ -13,7 +13,7 @@ R.FE8U={code:"BE8E",crc:0xA47246AE,
  characters:{addr:0x08803D30,size:0x34,count:255,numberAt:4},
  classes:{addr:0x08807110,size:0x54,count:255,numberAt:4},
  items:{addr:0x08809B10,size:0x24,count:256,numberAt:6},
- chapters:{addr:0x088B0890,size:0x94,count:128},
+ chapters:{addr:0x088B0890,size:0x94,count:79},
  assets:0x088B363C,text:0x0815D48C,textPointer:0xA2A0,huffman:[0x6DC,0x6E0]};
 
 // ---------- bytes ----------
@@ -83,7 +83,7 @@ function huffman(rom,tree,rootNode,at,limit){
   if(++steps>40000||node<0||node+4>rom.length||at>rom.length)return null;
   const l=u16(rom,node),r=u16(rom,node+2);
   if(r&0x8000){const lo=l&0xFF,hi=l>>8;if(!lo)break;out.push(lo);if(hi)out.push(hi);if(out.length>=limit)break;node=rootNode;continue;}
-  if(!bits){cur=rom[at++];bits=8;}
+  if(!bits){if(at>=rom.length)return null;cur=rom[at++];bits=8;}
   const bit=cur&1;cur>>=1;bits--;node=tree+(bit?r:l)*4;
  }
  return out;
@@ -93,6 +93,7 @@ function textReader(rom,table,tree,rootNode){
  const cache={};
  return function(id){
   if(cache[id]!==undefined)return cache[id];
+  if(!Number.isInteger(id)||id<0||table<0||table+id*4+4>rom.length)return "";
   const p=u32(rom,table+id*4);let bytes=null;
   if(p&0x80000000){const o=off(rom,(p&0x7FFFFFFF)>>>0);if(o>=0)bytes=rawText(rom,o,4000);}
   else{const o=off(rom,p);if(o>=0&&tree>=0)bytes=huffman(rom,tree,rootNode,o,4000);}
@@ -134,7 +135,7 @@ R.open=function(rom,base){
   return off(rom,relocate(rom,ctx.refs[key]||[],addr));};
  ["characters","classes","items","chapters","assets","text"].forEach(k=>{ctx[k+"At"]=place(k);});
  // La tabla de textos también se lee en 0xA2A0.
- if(base){const t=u32(rom,F.textPointer);if(isPtr(rom,t))ctx.textAt=off(rom,t);}
+ {const t=u32(rom,F.textPointer);if(isPtr(rom,t))ctx.textAt=off(rom,t);}
  ["characters","classes","items"].forEach(k=>{const s=tableShift(rom,ctx[k+"At"],F[k]);ctx[k+"Shift"]=s.shift;if(s.score<6)ctx.errors.push("No encuentro la tabla de "+({characters:"personajes",classes:"clases",items:"objetos"})[k]+" en "+hex(ctx[k+"At"]+BASE)+".");});
  if(ctx.errors.length)return ctx;
  setupText(ctx,base);
@@ -144,15 +145,17 @@ R.open=function(rom,base){
 function setupText(ctx,base){
  const rom=ctx.rom,F=R.FE8U,nameOf=reader=>{const c=charRow(ctx,1);return c?reader(c.nameId):"";};
  const candidates=[];
+ // FE8U: 0x6E0 -> base del árbol; 0x6DC -> puntero al puntero del nodo raíz.
+ const tree=off(rom,u32(rom,F.huffman[1])),holder=off(rom,u32(rom,F.huffman[0]));
+ const root=holder>=0?off(rom,u32(rom,holder)):-1;
+ if(tree>=0&&root>=tree&&root+4<=rom.length)candidates.push({tree,root});
  if(base&&base.huffman)candidates.push(base.huffman);
- const a=u32(rom,F.huffman[0]),b=u32(rom,F.huffman[1]);
- [[a,b],[off(rom,a)>=0?u32(rom,off(rom,a)):0,b]].forEach(([t,r])=>{if(!isPtr(rom,t)||!isPtr(rom,r))return;const rp=u32(rom,off(rom,r));
-  candidates.push({tree:off(rom,t),root:off(rom,r)});if(isPtr(rom,rp))candidates.push({tree:off(rom,t),root:off(rom,rp)});});
- for(const c of candidates){const read=textReader(rom,ctx.textAt,c.tree,c.root);const n=nameOf(read);if(base?n.length>0:/^Eirika/.test(n)){ctx.huffman=c;ctx.text=read;return;}}
+ for(const c of candidates){const read=textReader(rom,ctx.textAt,c.tree,c.root);const n=nameOf(read);if((base||ctx.crc!==F.crc)?/^[A-Za-z][\x20-\x7E]{1,39}$/.test(n):n==="Eirika"){ctx.huffman=c;ctx.text=read;return;}}
  // Sin árbol válido: solo se leerán los textos sin comprimir (parche anti-Huffman).
  ctx.text=textReader(rom,ctx.textAt,-1,-1);
- if(!base)ctx.notes.push("No pude descifrar los textos comprimidos: los nombres que no estén en texto plano saldrán como «Personaje N».");
+ ctx.notes.push("No pude descifrar los textos comprimidos: los nombres que no estén en texto plano saldrán como «Personaje N».");
 }
+R.setupText=setupText;
 function charRow(ctx,id){const F=R.FE8U.characters,o=ctx.charactersAt+(id-ctx.charactersShift)*F.size;return o>=0&&ctx.rom[o+4]===id?{nameId:u16(ctx.rom,o)}:null;}
 
 // ---------- lectura de datos ----------
@@ -161,18 +164,19 @@ R.WEAPON_TYPES=WEAPON_TYPES;
 R.read=function(ctx){
  const rom=ctx.rom,F=R.FE8U,name=(id,fallback)=>ctx.text(id)||fallback;
  const ranks=o=>{const r={};for(let k=0;k<8;k++)if(rom[o+k]){const c=WEAPON_TYPES[k];r[c]=Math.max(r[c]||0,rom[o+k]);}return r;};
- const data={};
+ const data={},classDef=ctx.clean&&ctx.crc===F.crc?Object.assign({},F.classes,{count:(F.items.addr-F.classes.addr)/F.classes.size}):F.classes;
  data.characters=readTable(rom,ctx.charactersAt,F.characters,ctx.charactersShift,(o,id)=>({id,nameId:u16(rom,o),name:name(u16(rom,o),"Personaje "+id),classId:rom[o+5],portraitId:u16(rom,o+6),
   level:rom[o+0xB],bases:{health:s8(rom[o+0xC]),power:s8(rom[o+0xD]),skill:s8(rom[o+0xE]),speed:s8(rom[o+0xF]),defense:s8(rom[o+0x10]),resistance:s8(rom[o+0x11]),luck:s8(rom[o+0x12]),build:s8(rom[o+0x13])},
   ranks:ranks(o+0x14),growth:{health:rom[o+0x1C],power:rom[o+0x1D],skill:rom[o+0x1E],speed:rom[o+0x1F],defense:rom[o+0x20],resistance:rom[o+0x21],luck:rom[o+0x22]},
   attributes:u32(rom,o+0x28),compare:[0,0x28]}));
- data.classes=readTable(rom,ctx.classesAt,F.classes,ctx.classesShift,(o,id)=>({id,nameId:u16(rom,o),name:name(u16(rom,o),"Clase "+id),promotion:rom[o+5],smsId:rom[o+6],portraitId:u16(rom,o+8),
+ data.classes=readTable(rom,ctx.classesAt,classDef,ctx.classesShift,(o,id)=>({id,nameId:u16(rom,o),name:name(u16(rom,o),"Clase "+id),promotion:rom[o+5],smsId:rom[o+6],portraitId:u16(rom,o+8),
   bases:{health:rom[o+0xB],power:rom[o+0xC],skill:rom[o+0xD],speed:rom[o+0xE],defense:rom[o+0xF],resistance:rom[o+0x10],build:rom[o+0x11],move:rom[o+0x12]},
   growth:{health:rom[o+0x1B],power:rom[o+0x1C],skill:rom[o+0x1D],speed:rom[o+0x1E],defense:rom[o+0x1F],resistance:rom[o+0x20],luck:rom[o+0x21]},
   attributes:u32(rom,o+0x28),ranks:ranks(o+0x2C),compare:[0,0x34]}));
  data.items=readTable(rom,ctx.itemsAt,F.items,ctx.itemsShift,(o,id)=>{const type=rom[o+7],range=rom[o+0x19];
   return {id,nameId:u16(rom,o),name:name(u16(rom,o),"Objeto "+id),iconId:rom[o+0x1D],type,attributes:u32(rom,o+8),uses:rom[o+0x14],might:rom[o+0x15],hit:rom[o+0x16],weight:rom[o+0x17],crit:rom[o+0x18],
    minRange:range>>4,maxRange:range&0xF,cost:u16(rom,o+0x1A),rank:rom[o+0x1C],weapon:type<8&&!!(u32(rom,o+8)&5),compare:[0,0x0C,0x14,0x24]};});
+ if(ctx.clean&&ctx.crc===F.crc&&(!data.characters[1]||data.characters[1].name!=="Eirika"))ctx.errors.push("La ROM original se reconoció por CRC, pero no se pudo leer el nombre de Eirika. No se guardarán datos incorrectos.");
  data.chapters=readChapters(ctx);
  data.chapters.forEach(ch=>{ch.units=ch.units.filter(u=>{const c=data.characters[u.character];u.classId=u.classId||(c&&c.classId)||0;return u.team<=2&&!!data.classes[u.classId];});});
  return data;
@@ -185,35 +189,36 @@ function mapAt(ctx,i){const o=asset(ctx,i);if(o<0)return null;const d=R.lz77(ctx
  const tiles=[];for(let k=0;k<w*h;k++)tiles.push(u16(d,2+k*2));return {width:w,height:h,tiles};}
 function configAt(ctx,i){const o=asset(ctx,i);if(o<0)return null;const d=R.lz77(ctx.rom,o,0x4000);return d&&d.length>=0x2400?d:null;}
 // Campos del capítulo: se comprueba la disposición conocida (mapa en +8, configuración en +7) y si no cuadra se busca.
-function chapterLayout(ctx){
- const rom=ctx.rom,F=R.FE8U.chapters,score=(fieldOf,test)=>{let s=0;for(let c=0;c<Math.min(F.count,40);c++){const o=ctx.chaptersAt+c*F.size;if(o+F.size>rom.length)break;if(test(rom[o+fieldOf]))s++;}return s;};
- const pick=(pref,test)=>{const best={at:pref,s:score(pref,test)};if(best.s>=8)return best.at;for(let f=0;f<F.size;f++){const s=score(f,test);if(s>best.s){best.at=f;best.s=s;}}return best.s>=1?best.at:-1;};
- const map=pick(8,i=>!!mapAt(ctx,i)),config=pick(7,i=>!!configAt(ctx,i));
- const events=pick(0x74,i=>{const o=asset(ctx,i);return o>=0&&eventGroup(ctx,o).loads.length>0;});
- return {map,config,obj1:config-3,obj2:config-2,palette:config-1,events};
-}
-// Grupo de eventos del capítulo: punteros a listas y escenas. Se recorren las escenas buscando LOAD (cargar unidades).
-function eventGroup(ctx,o){
- const rom=ctx.rom,loads=[];let scene=-1;
- // +0x48: escena inicial en FE8. Si no hay LOAD ahí, se prueba cualquier puntero del grupo.
- const fields=[0x48].concat([...Array(0x14)].map((_,k)=>k*4).filter(f=>f!==0x48));
- for(const f of fields){const p=off(rom,u32(rom,o+f));if(p<0)continue;const w=walkScript(rom,p,0);if(w.ok&&w.loads.length){scene=f;w.loads.forEach(l=>loads.push(l));break;}}
- return {scene,loads};
-}
-// Códigos de evento de FE8: 2 bytes; byte alto = código, nibble alto del bajo = tamaño en medias palabras.
-function walkScript(rom,at,depth){
- const loads=[];let i=at;
- for(let steps=0;steps<3000;steps++){
-  if(i+2>rom.length)return {ok:false,loads};
-  const lo=rom[i],id=rom[i+1],size=(lo>>4)*2;
-  if(!size)return {ok:false,loads};
-  if(id===0x2C&&size>=8){const p=off(rom,u32(rom,i+4));if(p>=0)loads.push(p);}
-  if(id===0x0A&&size>=8&&depth<3){const p=off(rom,u32(rom,i+4));if(p>=0){const w=walkScript(rom,p,depth+1);if(w.ok)w.loads.forEach(l=>loads.push(l));}}
-  if(id===0x01)return {ok:true,loads};
-  i+=size;
+function chapterLayout(ctx){return {map:8,config:7,obj1:4,obj2:5,palette:6,events:0x74};}
+// Interpret the subset of introductory events relevant to map and unit loading.
+// Follow direct CALLs; ignore units loaded on cutscene maps; apply CLEAR operations.
+// Conditional control flow is deliberately not emulated. It is a best-effort initial placement.
+R.initialUnitLoads=function(rom,group,chapter){
+ const start=off(rom,u32(rom,group+0x48)),player=off(rom,u32(rom,group+0x28));
+ const state={map:chapter,loads:[],steps:0},active=new Set();
+ function walk(at,depth){
+  if(at<0||depth>8||active.has(at))return;active.add(at);
+  for(let i=at;i>=0&&i+4<=rom.length&&state.steps++<30000;){
+   const lo=rom[i],op=rom[i+1],len=(lo>>4)*2,sub=lo&15;
+   if(len<4||i+len>rom.length)break;
+   if(op===0x01)break;
+   if(op===0x25){const map=u16(rom,i+2);if(map!==state.map){state.map=map;state.loads=[];}}
+   if(op===0x34&&[0xA,0xB,0xC].includes(sub)){
+    const team={10:0,11:1,12:2}[sub];state.loads=state.loads.filter(l=>l.team!==team);
+   }
+   if(op===0x2C&&len>=8&&state.map===chapter){const p=off(rom,u32(rom,i+4));if(p>=0){for(const u of R.units(rom,p))state.loads.push(u);}}
+   if(op===0x0A&&len>=8)walk(off(rom,u32(rom,i+4)),depth+1);
+   i+=len;
+  }
+  active.delete(at);
  }
- return {ok:false,loads};
-}
+ walk(start,0);
+ // The chapter header provides the normal-mode player unit list. Prefer it over
+ // cutscene duplicates; use it if the intro uses dynamic LOAD pointers.
+ const allies=player>=0?R.units(rom,player).filter(u=>u.team===0):[];
+ if(allies.length)state.loads=allies.concat(state.loads.filter(u=>u.team!==0||!allies.some(a=>a.character===u.character)));
+ return state.loads;
+};
 // Definición de unidad de FE8: 20 bytes.
 R.units=function(rom,at){
  const out=[];
@@ -222,7 +227,7 @@ R.units=function(rom,at){
   const u={character:rom[o],classId:rom[o+1],leader:rom[o+2],autolevel:b3&1,team:(b3>>1)&3,level:b3>>3,x:pos&63,y:(pos>>6)&63,
    items:Array.from(rom.subarray(o+12,o+16)).filter(Boolean),ai:Array.from(rom.subarray(o+16,o+20))};
   // Si entra caminando (REDA), su sitio es la última parada.
-  const n=rom[o+7],rp=off(rom,u32(rom,o+8));if(n&&n<16&&rp>=0&&rp+n*8<=rom.length){const last=rp+(n-1)*8,packed=u16(rom,last);u.redaX=packed&63;u.redaY=(packed>>6)&63;u.redaBytes=[rom[last],rom[last+1]];}
+  const n=rom[o+7],rp=off(rom,u32(rom,o+8));if(n&&n<=64&&rp>=0&&rp+n*8<=rom.length){const last=rp+(n-1)*8;u.redaX=rom[last];u.redaY=rom[last+1];}
   out.push(u);}
  return out;
 };
@@ -231,17 +236,24 @@ function readChapters(ctx){
  if(L.map<0){ctx.errors.push("No encuentro los mapas de los capítulos.");return out;}
  for(let c=0;c<F.count;c++){const o=ctx.chaptersAt+c*F.size;if(o+F.size>rom.length)break;
   const map=mapAt(ctx,rom[o+L.map]);if(!map)continue;
+  const np=off(rom,u32(rom,o));if(np<0)continue;
   const ch={index:c,offset:o,bytes:Array.from(rom.subarray(o,o+F.size)),map,assets:{map:rom[o+L.map],config:L.config>=0?rom[o+L.config]:0,obj1:L.config>=0?rom[o+L.obj1]:0,obj2:L.config>=0?rom[o+L.obj2]:0,palette:L.config>=0?rom[o+L.palette]:0}};
-  const np=off(rom,u32(rom,o));ch.name=np>=0?printable(rawText(rom,np,40)):"";
-  if(!/^[\x20-\x7E]{2,40}$/.test(ch.name))ch.name="";
+  ch.name=printable(rawText(rom,np,40));
+  if(!/^[\x20-\x7E]{2,40}$/.test(ch.name))continue;
   const title=ctx.text(u16(rom,o+0x70));ch.internalName=ch.name;ch.name=title&&title.length>=2&&title.length<=80?title:ch.name||"Capítulo "+c;
   const cfg=ch.assets.config?configAt(ctx,ch.assets.config):null;
   ch.terrain=map.tiles.map(t=>cfg?cfg[0x2000+(t>>2)]||0:0);
   ch.units=[];
-  if(L.events>=0){const eo=asset(ctx,rom[o+L.events]);if(eo>=0){const g=eventGroup(ctx,eo);g.loads.forEach(l=>R.units(rom,l).forEach(u=>{
-   if(u.redaX!==undefined){if(u.redaX<map.width&&u.redaY<map.height){u.x=u.redaX;u.y=u.redaY;}else if(u.redaBytes[0]<map.width&&u.redaBytes[1]<map.height){u.x=u.redaBytes[0];u.y=u.redaBytes[1];}}
-   delete u.redaX;delete u.redaY;delete u.redaBytes;
-   if(u.x<map.width&&u.y<map.height&&!ch.units.some(v=>v.x===u.x&&v.y===u.y))ch.units.push(u);}));}}
+  if(L.events>=0){const eo=asset(ctx,rom[o+L.events]);if(eo>=0&&eo+0x50<=rom.length){
+   for(const u of R.initialUnitLoads(rom,eo,c)){
+    if(u.redaX!==undefined&&u.redaX<map.width&&u.redaY<map.height){u.x=u.redaX;u.y=u.redaY;}
+    delete u.redaX;delete u.redaY;
+    if(u.x>=map.width||u.y>=map.height||u.team>2)continue;
+    if(u.team===0&&ch.units.some(v=>v.team===0&&v.character===u.character))continue;
+    if(ch.units.some(v=>v.x===u.x&&v.y===u.y))continue;
+    ch.units.push(u);
+   }
+  }}
   out.push(ch);}
  return out;
 }
@@ -298,7 +310,8 @@ const stat=(o,k)=>Math.max(0,o[k]||0);
 R.apply=function(p,plan,opts){
  opts=opts||{};const ids={characters:{},classes:{},items:{}},report={classes:0,actors:0,weapons:0,items:0,maps:0,units:0,reused:0};
  // Stable FE IDs prevent merging separate classes or characters with the same display name.
- const used=new Set(),reuse=(list,table,source)=>{const rows=(list||[]).filter(Boolean),matches=rows.filter(x=>D.fields(x,table).fe8Source===opts.source&&D.fields(x,table).fe8Id===source.id),legacy=rows.filter(x=>x.name===source.name&&!D.fields(x,table).fe8Source&&!used.has(x));const r=matches[0]||(legacy.length===1&&opts.reuseNames!==false?legacy[0]:null);if(r){report.reused++;used.add(r);}return r;};
+ const placeholder=(table,id)=>(table==="actors"?"Personaje ":table==="classes"?"Clase ":"Objeto ")+id;
+ const used=new Set(),legacyPlaceholders=new Set(),reuse=(list,table,source)=>{const rows=(list||[]).filter(Boolean),matches=rows.filter(x=>D.fields(x,table).fe8Source===opts.source&&D.fields(x,table).fe8Id===source.id),legacy=rows.filter(x=>x.name===source.name&&!D.fields(x,table).fe8Source&&!used.has(x)),fallback=rows.filter(x=>x.name===placeholder(table,source.id)&&!D.fields(x,table).fe8Source&&!used.has(x));const r=matches[0]||(opts.reuseNames!==false?(legacy.length===1?legacy[0]:legacy.length===0&&fallback.length===1?fallback[0]:null):null);if(r){report.reused++;used.add(r);if(r.name===placeholder(table,source.id)){legacyPlaceholders.add(r);if(source.name!==r.name){D.set(table,r,"name",source.name);report.renamed=(report.renamed||0)+1;}}}return r;};
  const identify=(table,row,source)=>{if(opts.source){D.set(table,row,"fe8Source",opts.source);D.set(table,row,"fe8Id",source.id);}used.add(row);};
  // objetos y armas
  plan.items.forEach(it=>{const table=it.weapon?"weapons":"items",list=p[table];let row=reuse(list,table,it);
@@ -329,29 +342,31 @@ R.apply=function(p,plan,opts){
    if(Object.keys(c.ranks).length)D.set("actors",row,"ranks",c.ranks);
    const u=firstUnit[c.id];if(u&&u.items.length)D.set("actors",row,"inventory",u.items.map(i=>ids.items[i]).filter(Boolean));
    report.actors++;}
+  // Repair legacy imported actors which still point at an invalid/default class.
+  if(ids.classes[c.classId]&&((opts.source&&D.fields(row,"actors").fe8Source===opts.source)||legacyPlaceholders.has(row)&&opts.repairActors||!p.classes[row.classId]&&opts.repairActors))D.set("actors",row,"classId",ids.classes[c.classId]);
   identify("actors",row,c);ids.characters[c.id]=row.id;});
  // capítulos → mapas
  const maps=[],infos=p.mapInfos=p.mapInfos||[null];let nextId=Math.max(0,...infos.filter(Boolean).map(m=>m.id))+1,order=Math.max(0,...infos.filter(Boolean).map(m=>m.order||0))+1;
  const template=opts.template||{};
  plan.chapters.forEach(ch=>{
-  const id=nextId++,w=ch.map.width,h=ch.map.height,data=new Array(w*h*6).fill(0),ground=opts.nativePreview?0:(template.data||[])[0]||0;
+  const id=opts.replaceMapId&&plan.chapters.length===1?opts.replaceMapId:nextId++,w=ch.map.width,h=ch.map.height,data=new Array(w*h*6).fill(0),ground=0;
   for(let k=0;k<w*h;k++){data[k]=ground;data[5*w*h+k]=opts.terrainIds?(opts.terrainIds[ch.terrain[k]]||0):(ch.terrain[k]||0);}
   const map={autoplayBgm:false,autoplayBgs:false,battleback1Name:"",battleback2Name:"",bgm:{name:"",pan:0,pitch:100,volume:90},bgs:{name:"",pan:0,pitch:100,volume:90},disableDashing:false,
-   displayName:ch.name,encounterList:[],encounterStep:30,height:h,note:"",parallaxLoopX:false,parallaxLoopY:false,parallaxName:"",parallaxShow:true,parallaxSx:0,parallaxSy:0,
+   displayName:ch.name,encounterList:[],encounterStep:30,height:h,note:"<FE8Import:"+(opts.source||"unknown")+":"+ch.index+">",parallaxLoopX:false,parallaxLoopY:false,parallaxName:"",parallaxShow:true,parallaxSx:0,parallaxSy:0,
    scrollType:0,specifyBattleback:false,tilesetId:template.tilesetId||1,width:w,data,events:[null]};
   let throne=false;
   ch.terrain.forEach((t,k)=>{const kind=MARKERS[t];if(!kind)return;if(kind==="goal"){if(throne)return;throne=true;}const e=M.create(map,kind,k%w,Math.floor(k/w),{});if(kind==="shop"){M.removeCommand(e,"Shop");M.setCommand(e,"Interaction",{type:"shop",name:"Tienda (sin inventario importado)",stock:[]});}});
   ch.units.forEach(u=>{const cls=ids.classes[u.classId]||0,inv=u.items.map(i=>ids.items[i]).filter(Boolean),weapon=inv.find(i=>i.kind==="weapon"),item=inv.find(i=>i.kind==="item"),actor=ids.characters[u.character];
    const named=plan.characters.find(x=>x.id===u.character),boss=u.team===2&&isBossIn(plan,u);
    if(!cls){report.skippedUnits=(report.skippedUnits||0)+1;return;}
-   if(u.team===0&&actor)M.create(map,"ally",u.x,u.y,{actorId:actor,level:u.level,lord:!!(named&&named.attributes&0x2000)});
+   if(u.team===0&&actor&&Number(p.actors[actor].classId)===cls)M.create(map,"ally",u.x,u.y,{actorId:actor,level:u.level,lord:!!(named&&named.attributes&0x2000)});
    else if(u.team===2&&!boss&&!(named&&named.portraitId))M.create(map,"enemy",u.x,u.y,{classId:cls,level:u.level,role:u.ai[1]===3?"hold":"auto",weaponId:weapon?weapon.id:0,itemId:item?item.id:0});
    else{// jefes y unidades verdes: ★ Unidad con su personaje (sus estadísticas propias)
     const e=M.create(map,"enemy",u.x,u.y,{});M.removeCommand(e,"Enemy");
     M.setCommand(e,"Unit",{actorId:actor||0,classId:cls,name:named?named.name:"",team:u.team===2?"2":u.team===0?"1":"3",level:u.level,weaponId:weapon?weapon.id:0,itemId:item?item.id:0,ai:boss||u.ai[1]===3?"hold":"approach",boss});}
    report.units++;});
   M.setCommand(M.missionEvent(map,true),"Mission",{title:ch.name,objective:throne?"seize":"eliminate",mapGraphics:"resource"});
-  infos[id]={id,expanded:false,name:ch.name,order:order++,parentId:0,scrollX:0,scrollY:0};
+  infos[id]=Object.assign({id,expanded:false,order:order++,parentId:0,scrollX:0,scrollY:0},infos[id]||{},{name:ch.name});
   maps.push({id,chapter:ch,json:map,image:"img/astra/maps/Map"+String(id).padStart(3,"0")+".png"});report.maps++;});
  return {maps,report,ids};
 };
@@ -424,6 +439,29 @@ R.movingSprite=function(ctx,classId,team=1){
  if(!gfx||!p||gfx.length!==32*32*15/2)return null;const src=R.decode4bpp(gfx,32,32*15,p);if(!src||!bounds(src))return null;
  const im=rgba(128,128),seq=[0,8,8,4];for(let row=0;row<4;row++)for(let f=0;f<4;f++)blit(im,src,0,(seq[row]+f)*32,32,32,f*32,row*32,row===2);
  return {image:im,source:src,width:32,height:32,anchorY:32};
+};
+// Native RPG Maker MZ sheets B-E. B: tile 0 is reserved for transparency.
+// Slots 1..1023 use the same addressing as Tilemap._drawNormalTile.
+R.nativeTiles=function(ch,im){
+ const w=ch.map.width,h=ch.map.height,n=w*h;
+ T.assert(im&&im.width===w*16&&im.height===h*16&&ch.map.tiles.length===n,"Mapa FE8 inválido para tiles MZ");
+ const slots=new Map(),sheets=[],ids=[],flags=new Array(8192).fill(0);flags[0]=0x10;
+ for(let k=0;k<n;k++){
+  const key=ch.map.tiles[k],terrain=ch.terrain[k]||0;let id=slots.get(key);
+  if(id===undefined){id=slots.size+1;T.assert(id<=1023,"El capítulo supera los 1023 tiles B–E de MZ");slots.set(key,id);
+   const page=id>>8,local=id&255;if(!sheets[page])sheets[page]=rgba(256,256);
+   const x=((local>>7)*8+local%8)*16,y=(Math.floor(local/8)%16)*16;
+   blit(sheets[page],im,k%w*16,Math.floor(k/w)*16,16,16,x,y);
+   const t=R.TERRAIN[terrain];flags[id]=t&&t[1]===0?15:0;
+  }ids.push(id);
+ }
+ return {sheets,ids,flags,unique:slots.size};
+};
+// RPG Maker's single-character sheet: 3 columns x 4 directions, nearest-neighbour scaled by caller.
+R.nativeCharacter=function(sprite,moving){
+ const src=moving||sprite;if(!src)return null;const w=src.width,h=src.height,im=rgba(w*3,h*4);
+ for(let row=0;row<4;row++)for(let f=0;f<3;f++)blit(im,src.image,f*w,(moving?row:0)*h,w,h,f*w,row*h);
+ return im;
 };
 R.itemIcon=function(ctx,id){const b=ctx.rom,t=R.graphicTables(ctx),p=palAt(b,t.iconPal),a=t.icons+id*128;if(t.icons<0||!p||id<0||id>255||!inRange(b,a,128))return null;return R.decode4bpp(b.subarray(a,a+128),16,16,p);};
 R.classAnimationDefs=function(ctx,cls){

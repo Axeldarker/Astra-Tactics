@@ -28,7 +28,7 @@ async function nativeFace(p,name,im){
  const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error("No pude codificar cara MZ")),"image/png"));const path="img/faces/"+name+".png";await p.backend.write(path,blob);delete p.images[path];
 }
 async function installGraphics(p,pack,ctx,data,plan,res,source,options,hint){
- const r={portraits:0,nativeFaces:0,standing:0,moving:0,animations:0,clips:0,icons:0,assigned:0,skipped:0,warnings:[]},base="img/astra/fe8/"+source+"/";
+ const r={portraits:0,nativeFaces:0,nativeCharacters:0,nativeTilesets:0,standing:0,moving:0,animations:0,clips:0,icons:0,assigned:0,skipped:0,warnings:[]},base="img/astra/fe8/"+source+"/";
  const tables=R.graphicTables(ctx);r.tables=tables;
  for(const [k,v] of Object.entries(tables))if(v<0)r.warnings.push("Tabla gráfica no localizada: "+k);
  pack.faces=pack.faces||{};pack.units=pack.units||{};pack.atlases=pack.atlases||{};pack.clips=pack.clips||{};pack.itemIcons=pack.itemIcons||{};pack.itemIcons.weapons=pack.itemIcons.weapons||{};pack.itemIcons.items=pack.itemIcons.items||{};
@@ -55,6 +55,7 @@ async function installGraphics(p,pack,ctx,data,plan,res,source,options,hint){
    hint("Sprites de mapa · "+c.name);let map=null,walk=null;for(let team=0;team<4;team++){
     const sprite=R.standingSprite(ctx,c.smsId,team);if(sprite){const path=base+"map/"+c.id+"_"+team+".png";await png(p,path,sprite.image);if(!map)map={path,width:sprite.width,height:sprite.height,anchorY:sprite.anchorY,teamPaths:{}};map.teamPaths[team]=path;if(team===1)map.path=path;}
     const moving=R.movingSprite(ctx,c.id,team);if(moving){const path=base+"map/"+c.id+"_walk_"+team+".png";await png(p,path,moving.image);if(!walk)walk={path,width:moving.width,height:moving.height,anchorY:moving.anchorY,teamPaths:{}};walk.teamPaths[team]=path;if(team===1){walk.path=path;await png(p,base+"map/"+c.id+"_moving_source.png",moving.source);walk.sourcePath=base+"map/"+c.id+"_moving_source.png";}}
+    if(options.native&&team>0&&(sprite||moving)){const native=R.nativeCharacter(sprite,moving),nativeName="$FE8_"+source+"_Class_"+c.id+"_"+team;if(native){await png(p,"img/characters/"+nativeName+".png",native,(Number(p.tileSize)||48)/16);art.nativeCharacters=art.nativeCharacters||{};art.nativeCharacters[team]=nativeName;r.nativeCharacters++;}}
    }
    if(map){art.map=map;r.standing++;installed=true;}else warn(c.name,"sprite de espera "+c.smsId+" no legible");if(walk){art.walk=walk;r.moving++;installed=true;}
   }catch(e){warn(c.name,e);}}
@@ -80,17 +81,35 @@ async function installGraphics(p,pack,ctx,data,plan,res,source,options,hint){
   if(installed&&!protectedArt){pack.units[name]=art;D.set("classes",row,"art",name);}
   await pause();
  }
+ if(options.native){for(const c of plan.characters){const row=p.actors[res.ids.characters[c.id]],cls=p.classes[res.ids.classes[c.classId]];if(!row||!cls)continue;const art=pack.units[D.fields(cls,"classes").art],name=art&&art.nativeCharacters&&art.nativeCharacters[1];if(name&&(!row.characterName||/^\$FE8_/.test(row.characterName)||options.replace)){D.set("actors",row,"characterName",name);D.set("actors",row,"characterIndex",0);}}}
  if(options.icons){for(const item of plan.items){const ref=res.ids.items[item.id];if(!ref)continue;const group=ref.kind==="weapon"?"weapons":"items",old=pack.itemIcons[group][ref.id];if(old&&!old.fe8Source&&!options.replace)continue;
   try{let entry=iconCache.get(item.iconId);if(!entry){const im=R.itemIcon(ctx,item.iconId);if(!im)continue;const path=base+"icons/"+item.iconId+".png";await png(p,path,im);entry={path,rect:[0,0,16,16],fe8Source:source};iconCache.set(item.iconId,entry);}pack.itemIcons[group][ref.id]=entry;r.icons++;}catch(e){warn(item.name,e);}
  }}
  return r;
+}
+// Generate a real Tilesets.json record and B-E sheets. Preserve unrelated tilesets and maps.
+async function nativeMap(p,source,m,img){
+ const built=R.nativeTiles(m.chapter,img),tag="FE8_"+source+"_"+m.chapter.index,names=new Array(9).fill("");
+ for(let i=0;i<built.sheets.length;i++)if(built.sheets[i]){const name=tag+"_"+"BCDE"[i];await png(p,"img/tilesets/"+name+".png",built.sheets[i],(Number(p.tileSize)||48)/16);names[5+i]=name;}
+ const tilesets=p.tilesets,old=tilesets.find(t=>t&&t.note==="<FE8Tileset:"+tag+">");const id=old?old.id:tilesets.length||1;
+ if(!tilesets.length)tilesets.push(null);
+ tilesets[id]={id,name:"FE8 · "+m.chapter.name,mode:0,note:"<FE8Tileset:"+tag+">",tilesetNames:names,flags:built.flags};
+ m.json.tilesetId=id;m.json.parallaxName="";m.json.parallaxShow=false;
+ const n=m.json.width*m.json.height;for(let k=0;k<n;k++)m.json.data[k]=built.ids[k];
+ return built.unique;
+}
+function nativeUnits(p,pack,map){
+ for(const e of map.events.filter(Boolean)){const c=M.find(e,"Ally")||M.find(e,"Enemy")||M.find(e,"Unit");if(!c)continue;
+  const a=p.actors[c.args.actorId],id=c.args.classId||(a&&a.classId),cls=p.classes[id],art=cls&&pack.units[D.fields(cls,"classes").art],team=c.id==="Ally"?1:c.id==="Enemy"?2:Number(c.args.team)||1;
+  const name=art&&art.nativeCharacters&&art.nativeCharacters[team];if(name)Object.assign(M.page(e).image,{characterName:name,characterIndex:0,direction:2,pattern:1,tileId:0});
+ }
 }
 
 Astra.openRomImport=function(initial){
  const p=P();if(!p)return Astra.ui.toast("Primero abre tu proyecto.");
  const {win,closeWin}=Astra.imgTools;
  const S={clean:null,hack:null,result:null,plan:null,busy:false,sequence:0};
- const w=win(`<header><h2>🎮 Importar Fire Emblem: The Sacred Stones (FE8)</h2><span class="grow"></span><button class="btn small" data-x="close">✕</button></header>
+ const w=win(`<header><h2>🎮 Importar Fire Emblem: The Sacred Stones (FE8 · Native Fix)</h2><span class="grow"></span><button class="btn small" data-x="close">✕</button></header>
   <div class="awbody single"><div class="romimp">
    <p>Importa directamente tu <b>ROM de Fire Emblem: The Sacred Stones (USA)</b>: sus capítulos, mapas, terreno y unidades. <b>Solo necesitas el archivo .gba. Incluye recursos gráficos cuando sean legibles.</b> Si quieres importar un hack, agrega un segundo archivo para comparar sus cambios con la ROM original.</p>
    <div class="romslots">
@@ -149,12 +168,21 @@ Astra.openRomImport=function(initial){
   const direct=mode==="direct",all=hdata.chapters,changed=all.filter(c=>c.changed),same=all.length-changed.length;
   const count=k=>Object.values(hdata[k]).filter(r=>r.changed).length;
   const notes=[...new Set(cctx.notes.concat(hctx.notes).concat(hctx.errors))];
+  // Read a real record before any write: the user can see Eirika/character 1, class and portrait.
+  const hero=hdata.characters[1],heroClass=hero&&hdata.classes[hero.classId],tables=R.graphicTables(hctx);
+  let face=null,standing=null;try{if(hero)face=R.portrait(hctx,hero.portraitId||(heroClass&&heroClass.portraitId)||0);if(heroClass)standing=R.standingSprite(hctx,heroClass.smsId,1);}catch(e){notes.push("Prueba gráfica: "+e.message);}
+  S.result.diagnostics={character1:hero?{name:hero.name,id:hero.id,classId:hero.classId,portraitId:hero.portraitId,className:heroClass&&heroClass.name}:null,huffman:!!hctx.huffman,textAt:hctx.textAt,portrait:!!face,standingSprite:!!standing,graphicTables:tables};
   $("riOut").innerHTML=`
    ${notes.length?`<div class="card warn">${notes.map(n=>"⚠ "+esc(n)).join("<br>")}</div>`:""}
    <div class="card">${direct
     ?`<b>ROM original cargada:</b> ${all.length} capítulos detectados. Puedes importar cualquiera de ellos.`
     :`<b>Hack detectado:</b> ${changed.length} capítulos modificados, ${count("characters")} personajes, ${count("classes")} clases y ${count("items")} objetos cambiados.`}
     <span class="help">${direct?"No hace falta añadir un parche ni otra ROM.":same+" capítulos sin cambios también pueden seleccionarse."}</span></div>
+   <div class="card"><h3>Comprobación previa · personaje FE8 #1</h3><div style="display:flex;align-items:center;gap:14px">
+    <canvas id="riFacePreview" width="96" height="80" style="image-rendering:pixelated;background:#0a1226;border:1px solid var(--line);border-radius:6px;flex:none"></canvas>
+    <div><b>${esc(hero?hero.name:"No encontrado")}</b> · ${esc(heroClass?heroClass.name:"Clase no encontrada")}<br>
+    <small>Retrato: ${face?"legible":"no legible"} · Sprite: ${standing?"legible":"no legible"} · Textos: ${hctx.huffman?"Huffman":"sin árbol válido"}</small><br>
+    <small>CRC: ${R.hex(R.crc32(hctx.rom))}. Si no aparece el personaje correcto, no repitas la importación: revisa los detalles técnicos.</small></div></div></div>
    <h3>Capítulos disponibles (${all.length})</h3>
    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
     <button type="button" class="btn small" data-x="selectAll">Seleccionar todos</button>
@@ -171,13 +199,15 @@ Astra.openRomImport=function(initial){
     <label class="chk"><input type="checkbox" id="riSprites" checked> Sprites de mapa en reposo y movimiento, por equipo</label>
     <label class="chk"><input type="checkbox" id="riBattle" checked> Animaciones de batalla por clase y arma (experimental)</label>
     <label class="chk"><input type="checkbox" id="riIcons" checked> Iconos de armas y objetos</label>
-    <label class="chk"><input type="checkbox" id="riNative" checked> Crear vista de mapa y caras también en RPG Maker MZ (parallax, no tiles editables)</label>
+    <label class="chk"><input type="checkbox" id="riNative" checked> Crear tilesets editables, sprites de eventos y caras nativas de RPG Maker MZ</label>
     <label class="chk"><input type="checkbox" id="riReplace"> Reemplazar asociaciones gráficas personalizadas existentes</label>
-    <p class="help">Para reparar gráficos de capítulos ya importados: pulsa Ninguno, mantén marcada la opción de traer toda la BD y vuelve a importar. No se crearán mapas adicionales. Revisa los nombres duplicados de importaciones antiguas.</p></div>
+    <label class="chk"><input type="checkbox" id="riRepair"> Reparar/reemplazar el mapa abierto (selecciona exactamente un capítulo; se guarda una copia de seguridad)</label>
+    <p class="help">Para reparar un mapa anterior, abre ese mapa, selecciona un único capítulo y marca Reparar/reemplazar el mapa abierto. Esto sustituye sus eventos. Para reparar solo la BD: selecciona Ninguno y deja activada toda la BD. Haz una copia del proyecto antes.</p></div>
    <div class="card" id="riPlan"></div>
    <details class="help"><summary>Detalles técnicos</summary>
     Tablas: personajes ${R.hex(hctx.charactersAt+0x08000000)}, clases ${R.hex(hctx.classesAt+0x08000000)}, objetos ${R.hex(hctx.itemsAt+0x08000000)}, capítulos ${R.hex(hctx.chaptersAt+0x08000000)}, textos ${R.hex(hctx.textAt+0x08000000)}.
     Textos: ${hctx.huffman?"Huffman":"sin comprimir"}. Campos del capítulo: ${esc(JSON.stringify(hctx.layout||{}))}.</details>`;
+  if(face){const c=$("riFacePreview");c.width=face.width;c.height=face.height;c.getContext("2d").putImageData(new ImageData(face.data,face.width,face.height),0,0);}
   plan();
  }
  const chosen=()=>[...w.querySelectorAll("[data-ch]")].filter(i=>i.checked).map(i=>Number(i.dataset.ch));
@@ -197,37 +227,41 @@ Astra.openRomImport=function(initial){
   try{
    T.assert(!p.pluginStatus||p.pluginStatus.ok,"Pulsa Actualizar motor gráfico MZ antes de importar.");
    if($("riSprites").checked||$("riBattle").checked){const runtime=await p.backend.text("js/plugins/TacticsUI.js").catch(()=>"");T.assert(runtime.includes("entry.teamPaths")&&runtime.includes("weaponKey"),"Pulsa Actualizar motor gráfico MZ para instalar el lector de los nuevos recursos. Cierra MZ antes de hacerlo.");}
+   const repair=$("riRepair").checked;let replaceMapId=0;
+   if(repair){T.assert(S.plan.chapters.length===1&&Astra.state.mapId,"Selecciona un único capítulo y abre el mapa a reparar.");T.assert(window.confirm("Se sustituirán el mapa y sus eventos actuales por el capítulo FE8 seleccionado. Se guardará una copia .astra-bak. ¿Continuar?"),"Cancelado.");replaceMapId=Astra.state.mapId;}
    const pack=Astra.db.ensurePack();
    hint("Creando datos y mapas…");await pause();
    const cur=Astra.state.map||{},ctx=S.result.hctx,source=R.crc32(ctx.rom).toString(16).padStart(8,"0");
-   const draw=$("riDraw").checked,native=$("riNative").checked,terrain=R.terrainMapping(Object.assign({},p.terrain,pack.terrain||{}),S.plan.chapters);
+   const draw=$("riDraw").checked,native=$("riNative").checked;T.assert(!S.plan.chapters.length||draw,"Activa Dibujar cada mapa: no se crearán mapas con tiles de relleno.");const terrain=R.terrainMapping(Object.assign({},p.terrain,pack.terrain||{}),S.plan.chapters);
    // Snapshot options before any asynchronous work. Do not save JSON until all PNGs have been attempted.
    const options={faces:$("riFaces").checked,sprites:$("riSprites").checked,battle:$("riBattle").checked,icons:$("riIcons").checked,native,replace:$("riReplace").checked};
-   const res=R.apply(p,S.plan,{source,terrainIds:terrain.ids,nativePreview:draw&&native,template:{tilesetId:cur.tilesetId,data:cur.data}});
+   const res=R.apply(p,S.plan,{source,terrainIds:terrain.ids,nativePreview:draw&&native,replaceMapId,repairActors:true,template:{tilesetId:cur.tilesetId,data:cur.data}});
    pack.maps=pack.maps||{};pack.terrain=terrain.terrain;
    const gr=await installGraphics(p,pack,ctx,S.result.hdata,S.plan,res,source,options,hint),written=[];
    for(const m of res.maps){
     hint("Guardando "+m.json.displayName+"…");await pause();
     if(draw){const img=R.renderMap(ctx,m.chapter);
      if(img){await png(p,m.image,img);pack.maps[m.id]={path:m.image,cell:16,width:m.json.width,height:m.json.height};written.push(m.image);
-      if(native){const cell=Number(p.tileSize)||48,parallax="!FE8_"+source+"_Map_"+m.id;if(cell%16===0&&img.width*cell/16<=8192&&img.height*cell/16<=8192){await png(p,"img/parallaxes/"+parallax+".png",img,cell/16);m.json.parallaxName=parallax;}else gr.warnings.push(m.json.displayName+": vista MZ omitida por tamaño de tile o textura.");}}
-     else {gr.warnings.push(m.json.displayName+": no se pudo dibujar el mapa; revisa sus tileset y paleta.");M.setCommand(M.missionEvent(m.json,true),"Mission",{mapGraphics:"native"});}}
+      if(native){const count=await nativeMap(p,source,m,img);gr.nativeTilesets++;m.nativeTiles=count;}}
+     else {throw new Error(m.json.displayName+": no se pudo dibujar el mapa; no se guardará un mapa vacío. Revisa sus tileset y paleta.");}}
     else M.setCommand(M.missionEvent(m.json,true),"Mission",{mapGraphics:"native"});
+    if(native)nativeUnits(p,pack,m.json);
     await Astra.saveFile(p,Astra.mapPath(m.id),JSON.stringify(m.json));written.push(Astra.mapPath(m.id));
    }
+   if(gr.nativeTilesets)await Astra.saveFile(p,"data/Tilesets.json",D.stringifyTable(p.tilesets));
    await Astra.saveFile(p,"data/MapInfos.json",D.stringifyTable(p.mapInfos));
    for(const t of ["actors","classes","weapons","items"]){await Astra.saveFile(p,"data/"+D.TABLES[t].file+".json",D.stringifyTable(p[t]));if(Astra.dbState)Astra.dbState.dirty.delete(t);}
    await Astra.saveFile(p,"data/"+p.packName+".json",JSON.stringify(pack));
    await Astra.saveFile(p,"js/plugins.js",Astra.writePlugins(p.plugins));
    if(Astra.dbState){Astra.dbState.dirty.delete("pack");Astra.dbState.dirty.delete("plugins");}
    const r=res.report;
-   const summary={source,counts:r,graphics:gr,limitations:["No se traducen scripts narrativos, refuerzos, inventario de tiendas ni efectos de hechizo.","La orientación, el impacto y las secuencias especiales de batalla requieren verificar con la ROM real.","Los PNG de mapas no son tiles editables de MZ."]};
+   const summary={source,counts:r,diagnostics:S.result.diagnostics,maps:res.maps.map(m=>({id:m.id,fe8Index:m.chapter.index,name:m.json.displayName,nativeTiles:m.nativeTiles||0,tilesetId:m.json.tilesetId,units:m.chapter.units.length})),graphics:gr,limitations:["No se traducen scripts narrativos, refuerzos, inventario de tiendas ni efectos de hechizo.","La orientación, el impacto y las secuencias especiales de batalla requieren verificar con la ROM real.","Los tiles de MZ son metatiles estáticos, sin autotiles ni animación de terreno GBA. La lógica de eventos sigue siendo aproximada."]};
    await Astra.saveFile(p,"data/FE8_Import_"+source+".json",JSON.stringify(summary,null,2));
    if(Astra.clearArtCache)Astra.clearArtCache();
    if(res.maps[0])localStorage.setItem("astra.map."+p.name,String(res.maps[0].id));
    closeWin();await Astra.open(p.backend);
    Astra.ui.modal(`<h2>🎮 Fire Emblem importado</h2><p>${r.maps} mapa${r.maps===1?"":"s"}, ${r.units} unidades, ${r.actors} personajes, ${r.classes} clases, ${r.weapons} armas y ${r.items} objetos nuevos${r.reused?` (y ${r.reused} que ya tenías, reutilizados)`:""}.</p>
-    <p><b>Gráficos:</b> ${gr.portraits} retratos, ${gr.standing} sprites de reposo, ${gr.moving} sprites de movimiento, ${gr.animations} animaciones (${gr.clips} pistas), ${gr.assigned} asignaciones y ${gr.icons} iconos.</p>
+    <p><b>Gráficos:</b> ${gr.portraits} retratos, ${gr.standing} sprites de reposo, ${gr.moving} sprites de movimiento, ${gr.animations} animaciones (${gr.clips} pistas), ${gr.assigned} asignaciones, ${gr.icons} iconos, ${gr.nativeTilesets} tilesets MZ y ${gr.nativeCharacters} hojas de personajes nativas.</p>
     ${gr.warnings.length?`<p class="help">⚠ ${gr.warnings.length} avisos. Informe completo: data/FE8_Import_${source}.json.</p><details><summary>Primeros avisos</summary><p class="help">${gr.warnings.slice(0,12).map(esc).join("<br>")}</p></details>`:""}
     <p class="help">Abre MZ de nuevo y prueba desde el menú táctico de TacticsMZ. Los diálogos, refuerzos, efectos especiales y recompensas de eventos requieren conversión adicional; no se han importado.</p>`,[{label:"Vale",value:0,cls:"gold"}]);
   }catch(e){hint("✖ "+e.message,true);$("riGo").disabled=false;}

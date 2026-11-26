@@ -44,7 +44,7 @@ async function welcome(){
 }
 async function open(backend){
  $("welcomeError").textContent="Abriendo…";
- const p=await Astra.loadProject(backend);S.project=p;M.db={actors:p.actors,classes:p.classes,weapons:p.weapons,items:p.items};
+ const p=await Astra.loadProject(backend);Object.keys(spriteCache).forEach(k=>delete spriteCache[k]);Astra.clearArtCache();S.preview=null;S.project=p;M.db={actors:p.actors,classes:p.classes,weapons:p.weapons,items:p.items};
  $("welcome").classList.add("hidden");$("welcomeError").textContent="";
  const maps=(p.mapInfos||[]).filter(Boolean).sort((a,b)=>a.order-b.order);
  $("mapSelect").innerHTML=maps.map(m=>`<option value="${m.id}">${esc(String(m.name||"Mapa "+m.id).replace(/^\s*\d+\s*[·.:-]\s*/,""))}</option>`).join("");
@@ -75,7 +75,7 @@ Astra.installPlugins=async function(p){
 // ---------- mapa ----------
 async function loadMap(id){
  if(S.dirty&&!await modal(`<h2>Cambios sin guardar</h2><p>Si cambias de mapa perderás los cambios de este.</p>`,[{label:"Cancelar",value:false},{label:"Descartar y cambiar",value:true,cls:"danger"}])){$("mapSelect").value=S.mapId;return;}
- const p=S.project;S.mapId=id;S.map=await Astra.loadMap(p,id);S.undo=[];S.redo=[];S.dirty=false;S.selected=0;
+ const p=S.project;S.mapId=id;S.map=await Astra.loadMap(p,id);S.preview=null;S.undo=[];S.redo=[];S.dirty=false;S.selected=0;
  localStorage.setItem("astra.map."+p.name,id);$("mapSelect").value=id;
  S.tileset=await Astra.loadTileset(p,S.map.tilesetId);
  const packMap=p.pack&&p.pack.maps&&p.pack.maps[id];S.packImage=packMap?await Astra.image(p,packMap.path):null;
@@ -168,7 +168,7 @@ function renderInspector(){
 function selectedUnitHtml(e){
  const c=M.find(e,"Ally")||M.find(e,"Enemy")||M.find(e,"Unit"),u=previewUnit(e),eng=S.preview&&S.preview.engine,p=S.project;
  const ally=M.kind(e)==="ally",actorId=c&&Number(c.args.actorId)||0,m=M.markers(S.map).find(x=>x.id===e.id)||{};
- const name=u&&u.name||(actorId&&(p.actors[actorId]||{}).name)||M.describe(e),cls=names(p.classes,u?u.classId:c&&c.args.classId),lv=u?u.level:c&&c.args.level||1;
+ const name=u&&u.name||(actorId&&(p.actors[actorId]||{}).name)||M.describe(e),cls=names(p.classes,u?u.classId:(c&&c.args.classId)||(actorId&&(p.actors[actorId]||{}).classId)||0),lv=u?u.level:c&&c.args.level||1;
  const hp=u?u.hp:0,max=u&&eng?eng.value(u,"health"):0,item=u&&u.inventory[u.equipped],w=item&&eng?eng.itemData(item):null;
  const portrait=ally&&actorId?`<canvas class="selport" width="96" height="96" data-actor="${actorId}"></canvas>`:`<canvas class="selport" id="heroCanvas" width="96" height="96"></canvas>`;
  return `<div class="selcard"><div class="ribbon">UNIDAD SELECCIONADA</div><div class="selbody">${portrait}<div class="selinfo">
@@ -247,7 +247,7 @@ function fieldHtml(cmd,f,v){
 // ---------- vista previa con el motor real ----------
 function preview(){
  if(S.preview)return S.preview;S.preview={engine:null};
- try{const m=T.compileMap(T.copy(S.map),S.mapId);m.deployment=m.deployment==="prepare"?"placed":m.deployment;S.preview.engine=new T.Engine(S.project.db,m);}catch(e){}
+ try{const m=T.compileMap(T.copy(S.map),S.mapId);m.deployment=m.deployment==="prepare"?"placed":m.deployment;S.preview.engine=new T.Engine(S.project.db,m);}catch(e){S.preview.error=e.message;console.warn("ASTRA: vista previa táctica",e.message);}
  return S.preview;
 }
 function previewUnit(e){const eng=preview().engine;return eng?eng.unit(e.id):null;}
@@ -262,7 +262,7 @@ function ranges(e){
 async function sprite(classId,actorId,team){
  const palette=S.project.pack&&S.project.pack.palette;
  const p=S.project,cls=p.db.classes[classId]||{},art=cls.art||cls.graphic,unit=p.pack&&p.pack.units&&art&&p.pack.units[art];
- if(unit&&unit.map){const im=await Astra.image(p,unit.map.path);if(im)return Object.assign(crop({im,sx:0,sy:0,w:unit.map.width,h:unit.map.height},palette,team),{base:16});}
+ if(unit&&unit.map){const im=await Astra.image(p,unit.map.teamPaths&&unit.map.teamPaths[team]||unit.map.path);if(im)return Object.assign(crop({im,sx:0,sy:0,w:unit.map.width,h:unit.map.height},unit.map.teamPaths?null:palette,team),{base:16});}
  const a=(p.actors||[])[actorId];
  if(a&&a.characterName){const im=await Astra.image(p,"img/characters/"+a.characterName+".png");if(im){const big=a.characterName[0]==="$"||a.characterName.slice(0,2)==="!$";const cw=im.width/(big?3:12),ch=im.height/(big?4:8),i=big?0:a.characterIndex;return Object.assign(crop({im,sx:((i%4)*3+1)*cw,sy:Math.floor(i/4)*4*ch,w:cw,h:ch}),{base:p.tileSize});}}
  return null;

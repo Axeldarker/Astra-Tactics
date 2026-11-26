@@ -37,3 +37,32 @@ const tm=R.terrainMapping({1:{name:'Existing',cost:99}},plan.chapters);assert.no
 const result=R.apply(project,plan,{source:'test',terrainIds:tm.ids,nativePreview:true});assert.notEqual(result.ids.classes[1],result.ids.classes[2]);assert.equal(result.maps[0].json.data[0],0);assert.equal(result.maps[0].json.data[20],tm.ids[1]);assert.equal(T.Editor.check(result.maps[0].json,1).ok,true);
 const repair=R.apply(project,R.plan(data,[],{allData:true}),{source:'test'});assert.equal(repair.report.maps,0);assert.equal(repair.ids.classes[1],result.ids.classes[1]);assert.equal(repair.ids.classes[2],result.ids.classes[2]);
 console.log('OK: tablas gráficas, retrato, sprites, iconos, OAM, clips, regiones, tienda vacía, IDs y reparación sin mapas.');
+// Regression: actual FE8U double-indirected Huffman root, direct text pointer.
+const textCtx={rom:B,charactersAt:0x20000,charactersShift:1,textAt:0x21000,crc:R.FE8U.crc,notes:[]};
+B[0x20004]=1;u16(B,0x20000,1);ptr(0x21004,0x24000);
+const tree=0x22000,holder=0x23000;ptr(0x6E0,tree);ptr(0x6DC,holder);ptr(holder,tree+6*4);
+// Three pair leaves, terminator; internal nodes 4,5,6. Bits 00,01,10,11 in LSB order.
+for(const [i,word] of [[0,0x6945],[1,0x6972],[2,0x616B],[3,0]])u32(B,tree+i*4,(0xFFFF0000|word)>>>0);
+u32(B,tree+16,0x00010000);u32(B,tree+20,0x00030002);u32(B,tree+24,0x00050004);B[0x24000]=0xD8;
+R.setupText(textCtx);assert.equal(textCtx.text(1),'Eirika');assert.deepEqual(textCtx.huffman,{tree,root:tree+24});
+// Intro with a cutscene on another map, then normal map and battle units.
+const group=0x25000,main=0x25100,cut=0x25200,ally=0x25300,enemy=0x25400,extra=0x25500,redas=0x25600;
+ptr(group+0x48,main);ptr(group+0x28,ally);
+function cmd(o,op,len=2,sub=0,arg=0,target=0){B[o]=len*16+sub;B[o+1]=op;u16(B,o+2,arg);if(len===4)ptr(o+4,target);}
+function unit(o,id,cls,team,x,y){B[o]=id;B[o+1]=cls;B[o+3]=(1<<3)|(team<<1);u16(B,o+4,x|(y<<6));}
+unit(ally,1,1,0,1,1);B[ally+7]=1;ptr(ally+8,redas);B[redas]=3;B[redas+1]=4;
+unit(enemy,2,1,2,5,5);unit(extra,5,1,0,3,3);
+cmd(main,0x0A,4,0,0,cut);cmd(main+8,0x2C,4,0,1,ally);cmd(main+16,0x2C,4,0,1,enemy);cmd(main+24,1);
+cmd(cut,0x25,2,0,16);cmd(cut+4,0x2C,4,0,1,extra);cmd(cut+12,0x25,2,0,0);cmd(cut+16,1);
+const placed=R.initialUnitLoads(B,group,0);assert.deepEqual(placed.map(x=>x.character),[1,2]);assert.equal(placed[0].redaX,3);assert.equal(placed[0].redaY,4);
+// Native tiles: more than 256 unique metatiles; verify addressing and every output pixel.
+const W=20,H=14,im={width:W*16,height:H*16,data:new Uint8ClampedArray(W*16*H*16*4)},tiles=Array.from({length:W*H},(_,i)=>i===W*H-1?5:i),terr=tiles.map(i=>i%2?1:16);
+for(let y=0;y<im.height;y++)for(let x=0;x<im.width;x++){const i=tiles[(y>>4)*W+(x>>4)],p=(y*im.width+x)*4;im.data.set([i&255,i>>8,((x&15)<<4)|(y&15),255],p);}
+const mz=R.nativeTiles({map:{width:W,height:H,tiles},terrain:terr},im);assert.equal(mz.unique,W*H-1);assert.equal(mz.flags[0],16);assert.equal(mz.flags[1],15);assert.equal(mz.ids.at(-1),mz.ids[5]);
+for(let k=0;k<tiles.length;k++){const id=mz.ids[k],sheet=mz.sheets[id>>8],sx=(Math.floor(id/128)%2*8+id%8)*16,sy=Math.floor(id%256/8)%16*16;for(let y=0;y<16;y++)for(let x=0;x<16;x++){const p=((sy+y)*256+sx+x)*4,q=((Math.floor(k/W)*16+y)*im.width+k%W*16+x)*4;for(let c=0;c<4;c++)assert.equal(sheet.data[p+c],im.data[q+c]);}}
+const cs=R.nativeCharacter(sprite,moving);assert.equal(cs.width,96);assert.equal(cs.height,128);
+// Fix old placeholder and existing map ID; no extra MapInfos entry.
+const er=project.actors[result.ids.characters[1]];er.name='Personaje 1';er.classId=999;
+const renamed={...character,name:'Eirika'},data2={...data,characters:{1:renamed}};
+const fixed=R.apply(project,R.plan(data2,[0],{allData:true}),{source:'test',replaceMapId:1,repairActors:true});assert.equal(fixed.maps[0].id,1);assert.equal(project.mapInfos.filter(Boolean).length,1);assert.equal(er.name,'Eirika');assert.equal(er.classId,result.ids.classes[1]);
+console.log('OK: Huffman Eirika, filtro de cinemáticas, REDA, mosaicos MZ (reconstrucción RGBA exacta), hoja nativa y reparación de mapa.');
