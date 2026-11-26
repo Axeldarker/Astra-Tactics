@@ -87,7 +87,7 @@ function renderList(){
  const t=tab(),all=entries();if(DB.sel[t.id]===undefined||!all.some(e=>String(e.id)===String(DB.sel[t.id])))DB.sel[t.id]=all.length?(t.id==="teams"&&all[1]?all[1].id:all[0].id):null;
  const creatable=t.table||["terrain","presets"].indexOf(t.id)>=0;
  $("dbList").innerHTML=`<div class="dbsearch"><input id="dbFilter" placeholder="Buscar por nombre o ID…" value="${esc(DB.filter)}"></div><div class="dbitems" id="dbItems"></div>
-  <div class="dbactions">${creatable?`<button class="btn small" data-act="new">＋ Nuevo</button>`:""}${t.table||t.id==="presets"?`<button class="btn small" data-act="dup">⧉ Duplicar</button>`:""}${t.id==="anims"?`<button class="btn small gold" data-act="import">📤 Importar animación</button>`:""}${t.id==="presets"?`<button class="btn small danger" data-act="delpreset">🗑</button>`:""}</div>`;
+  <div class="dbactions">${creatable?`<button class="btn small" data-act="new">＋ Nuevo</button>`:""}${t.table||t.id==="presets"?`<button class="btn small" data-act="dup">⧉ Duplicar</button>`:""}${t.id==="anims"?`<button class="btn small gold" data-act="import">📤 Importar animación</button><button class="btn small" data-act="gallery" data-s="anim">🌐 Galería</button>`:""}${t.id==="presets"?`<button class="btn small danger" data-act="delpreset">🗑</button>`:""}</div>`;
  renderItems(all);
 }
 function renderItems(all){
@@ -146,7 +146,7 @@ function formHtml(t){
 const FORMS={
  actors(row,e,f){
   const p=P(),cls=p.db.classes[row.classId]||{},variants=Object.keys(cls.variants||{});
-  return hero(`<canvas class="portrait" width="96" height="96" data-actor="${row.id}"></canvas><canvas class="mini" width="48" height="48" data-class="${row.classId}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(cls.name||"sin clase")} <button class="btn small" data-act="portrait">🙂 Importar retrato</button>`)
+  return hero(`<canvas class="portrait" width="96" height="96" data-actor="${row.id}"></canvas><canvas class="mini" width="48" height="48" data-class="${row.classId}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(cls.name||"sin clase")} <button class="btn small" data-act="portrait">🙂 Importar retrato</button> <button class="btn small" data-act="gallery" data-s="portrait">🌐 Galería</button>`)
   +section("Datos",F.text("name","Nombre",row.name)+F.sel("classId","Clase",row.classId,refOpts("classes"),true)+F.num("initialLevel","Nivel inicial",row.initialLevel)
    +(variants.length?F.sel("variant","Variante de la clase",e.variant||"",[["","(normal)"]].concat(variants.map(v=>[v,v]))):"")
    +F.text("affinity","Afinidad",e.affinity)+F.text("group","Grupo",e.group)+F.color("color","Color",e.color||"#61adcf")+F.area("profile","Perfil",row.profile)+F.text("deathQuote","Frase al caer",e.deathQuote))
@@ -160,7 +160,7 @@ const FORMS={
   return hero(`<canvas class="portrait" width="96" height="96" data-class="${row.id}"></canvas><span class="teams3">${[1,2,3].map(tm=>`<canvas width="32" height="32" data-class="${row.id}" data-team="${tm}"></canvas>`).join("")}</span>`,row.name||"",`ID ${row.id} · ${esc(D.MOVE_TYPES[e.moveType]||e.moveType)}`)
   +section("Datos",F.text("name","Nombre",row.name)+F.sel("moveType","Tipo de movimiento",e.moveType,withCustom(D.MOVE_TYPES,e.moveType))
    +F.num("maxLevel","Nivel máximo",e.maxLevel,20)+F.num("promoteLevel","Nivel para promocionar",e.promoteLevel,10)+F.num("capacity","Capacidad de rescate",e.capacity)+F.num("vision","Visión (niebla)",e.vision)+F.text("tags","Etiquetas (coma)",(e.tags||[]).join(", "),'data-list="1"'))
-  +section("Sprite de mapa",`<div class="artrow"><select data-k="art" data-t="sel">${opt("","— ninguno —")}${arts.map(a=>opt(a,a,a===e.art)).join("")}${e.art&&arts.indexOf(e.art)<0?opt(e.art,e.art+" (no existe)",true):""}</select><button class="btn small" data-act="mapsprite">📤 Subir sprite</button></div>`)
+  +section("Sprite de mapa",`<div class="artrow"><select data-k="art" data-t="sel">${opt("","— ninguno —")}${arts.map(a=>opt(a,a,a===e.art)).join("")}${e.art&&arts.indexOf(e.art)<0?opt(e.art,e.art+" (no existe)",true):""}</select><button class="btn small" data-act="mapsprite">📤 Subir sprite</button><button class="btn small" data-act="gallery" data-s="map">🌐 Galería</button></div>`)
   +section("Estadísticas",statsTable([{label:"Bases",key:"stats",value:e.stats},{label:"Crecimientos %",key:"growth",value:e.growth},{label:"Bono al promocionar",key:"promotionBonus",value:e.promotionBonus||{}}]))
   +section("Armas y animaciones de batalla",`<div class="wtable"><div class="wh"><span>Arma</span><span>Usa</span><span>Rango inicial</span><span>Animación de batalla</span><span></span></div>${types.map(w=>{const on=(e.weaponTypes||[]).indexOf(w)>=0,entry=ba[w],cur=entry?String(typeof entry==="string"?entry:entry.normal||"").replace(/:(normal|critical|miss)$/,""):"",far=ba[w+":far"];
    return `<div class="wr${on?"":" off"}"><span>${esc(D.WEAPON_TYPES[w]||w)}</span><input type="checkbox" data-k="weaponTypes" data-t="wtype" data-s="${esc(w)}"${on?" checked":""}><input type="number" data-k="ranks" data-t="stat" data-s="${esc(w)}" value="${(e.ranks||{})[w]===undefined?"":(e.ranks||{})[w]}" ${on?"":"disabled"}>
@@ -172,7 +172,7 @@ const FORMS={
  },
  weapons(row,e){
   const p=P(),spells=Object.keys((p.pack&&p.pack.spells&&p.pack.spells.definitions)||{});
-  return hero(`<canvas class="portrait icon" width="96" height="96" data-item="weapon:${row.id}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(D.WEAPON_TYPES[e.category]||e.category)} <button class="btn small" data-act="icon">🖼 Importar icono</button>`)
+  return hero(`<canvas class="portrait icon" width="96" height="96" data-item="weapon:${row.id}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(D.WEAPON_TYPES[e.category]||e.category)} <button class="btn small" data-act="icon">🖼 Importar icono</button> <button class="btn small" data-act="gallery" data-s="icon">🌐 Galería</button>`)
   +section("Datos",F.text("name","Nombre",row.name)+F.area("description","Descripción",row.description)+F.num("iconIndex","Icono (IconSet)",row.iconIndex)+F.num("price","Precio",e.price))
   +section("Combate",`<div class="grid3">${F.sel("category","Tipo",e.category,withCustom(D.WEAPON_TYPES,e.category))+F.num("might","Poder",e.might)+F.num("hit","Golpe",e.hit)+F.num("crit","Crítico",e.crit)+F.num("weight","Peso",e.weight)+F.num("uses","Usos",e.uses)
    +F.num("minRange","Alcance mín.",e.minRange)+F.num("maxRange","Alcance máx.",e.maxRange)+F.num("rank","Rango necesario",e.rank)+F.num("hits","Golpes por ataque",e.hits,1)+F.bool("magic","Mágica (usa Mag/Res)",e.magic)}</div>`
@@ -183,7 +183,7 @@ const FORMS={
  },
  items(row,e){
   const p=P();
-  return hero(`<canvas class="portrait icon" width="96" height="96" data-item="item:${row.id}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(D.ITEM_EFFECTS[e.effect]||e.effect)} <button class="btn small" data-act="icon">🖼 Importar icono</button>`)
+  return hero(`<canvas class="portrait icon" width="96" height="96" data-item="item:${row.id}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(D.ITEM_EFFECTS[e.effect]||e.effect)} <button class="btn small" data-act="icon">🖼 Importar icono</button> <button class="btn small" data-act="gallery" data-s="icon">🌐 Galería</button>`)
   +section("Datos",F.text("name","Nombre",row.name)+F.area("description","Descripción",row.description)+F.num("iconIndex","Icono (IconSet)",row.iconIndex)+F.num("price","Precio",e.price)+F.num("uses","Usos (0 = infinito)",e.uses))
   +section("Efecto",F.sel("effect","Qué hace",e.effect,withCustom(D.ITEM_EFFECTS,e.effect))
    +(["heal","torch","boost","growth","rank"].indexOf(e.effect)>=0?F.num("power","Potencia",e.power):"")
@@ -297,6 +297,7 @@ async function onClick(ev){
   if(act==="delpreset"){const list=presets();if(!list[DB.sel.presets])return;if(!await Astra.ui.modal(`<h2>Borrar plantilla</h2><p>¿Borrar «${esc(list[DB.sel.presets].name)}»? Los ★ Enemigo que la usen por nombre dejarán de encontrarla.</p>`,[{label:"Cancelar",value:false},{label:"Borrar",value:true,cls:"danger"}]))return;list.splice(DB.sel.presets,1);DB.sel.presets=0;savePresets();render();return;}
   if(act==="import"){Astra.importAnimation({project:p,pack:ensurePack,done:(name,assigned)=>{dirty("pack");if(assigned)dirty("classes");DB.tab="anims";DB.sel.anims=name;DB.mode="normal";render();Astra.ui.toast("🎞 Animación «"+name+"» importada. Recuerda guardar.");}});return;}
   if(act==="mapsprite"){const row=p.classes[DB.sel.classes];Astra.importMapSprite({project:p,pack:ensurePack,classId:row.id,done:name=>{dirty("pack");D.set("classes",row,"art",name);dirty("classes");Astra.clearArtCache();render();Astra.ui.toast("🧍 Sprite «"+name+"» asignado a "+row.name);}});return;}
+  if(act==="gallery"){const sec=b.dataset.s,ctx=sec==="map"?{classId:DB.sel.classes}:sec==="portrait"?{actorId:DB.sel.actors}:sec==="icon"?{target:(DB.tab==="weapons"?"weapon:":"item:")+DB.sel[DB.tab]}:{};Astra.openGallery(sec,ctx);return;}
   if(act==="portrait"){const row=p.actors[DB.sel.actors];Astra.importPortrait({project:p,pack:ensurePack,actorId:row.id,done:()=>{dirty("pack");render();Astra.ui.toast("🙂 Retrato de "+row.name+" importado. Recuerda guardar.");}});return;}
   if(act==="icon"){const kind=DB.tab==="weapons"?"weapon":"item";Astra.importItemIcon({project:p,pack:ensurePack,target:kind+":"+DB.sel[DB.tab],done:(t,label)=>{dirty("pack");render();Astra.ui.toast("🖼 Icono asignado a "+label+". Recuerda guardar.");}});return;}
   if(act==="playanim"){if(b.dataset.s){DB.tab="anims";DB.sel.anims=b.dataset.s;DB.mode="normal";render();}return;}

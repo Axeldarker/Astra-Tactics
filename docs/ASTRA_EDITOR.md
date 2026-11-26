@@ -291,6 +291,17 @@ En **📚 Base de datos → 🎞 Animaciones → 📤 Importar animación** pued
 
 Se guarda en `img/astra/map/` y se asigna a la clase. La vista previa lo muestra con los colores de cada equipo. Los sprites con la paleta GBA estándar se recolorean solos (rojo para enemigos, verde para otros).
 
+### 🌐 Galería de FE Essentials
+
+La forma más cómoda: **📥 Importar → 🌐 Explorar la galería de FE Essentials**, o el botón **🌐 Galería** de cada menú de la base de datos (Animaciones, Clases → Sprite de mapa, Personajes, Armas y Objetos).
+
+- Pestañas **🎞 Animaciones**, **🧍 Sprites de mapa**, **🙂 Retratos** y **⚔ Iconos**, con las mismas categorías que feessentials.com y un buscador.
+- Cada tarjeta enseña la vista previa (las animaciones, en movimiento) y sus armas. Elige el arma y pulsa **📥 Importar**: Astra descarga los archivos y abre el importador ya relleno.
+- Si abriste la galería desde una clase, un personaje o un arma, lo que importes se asigna directamente a esa clase, personaje o arma.
+- **📋** copia los créditos del recurso. Además, Astra apunta en el paquete de gráficos (`credits`) el nombre, el autor y el enlace de todo lo que importas desde la galería, para que no se te olvide nadie en los créditos del juego.
+
+feessentials.com muestra los recursos del [FE Repo](https://github.com/Klokinator/FE-Repo) de GitHub, y la galería lee ese mismo repositorio. Necesita internet. GitHub permite **60 consultas por hora** sin cuenta: Astra gasta una por sección y otra por categoría que abres, y las guarda 12 horas, así que es difícil llegar al límite. Si llegas, te dice a qué hora puedes volver.
+
 ### 📥 Importar: arrastrar o pegar un enlace
 
 El botón **📥 Importar** (arriba) es la forma rápida de traer cualquier recurso:
@@ -376,6 +387,7 @@ src/app/app.js           Interfaz: paleta, mapa, inspector, historial, teclado.
 src/app/anim.js          Reproductor de animaciones, importador (hoja PNG / FE Essentials / .zip) y sprites de mapa.
 src/app/database.js      Ventana Base de datos.
 src/app/importer.js      Menú 📥 Importar: arrastrar o enlace, detección del tipo, retratos e iconos.
+src/app/gallery.js       🌐 Galería: lee el FE Repo de GitHub (como feessentials.com) y manda cada recurso a su importador.
 src/app/style.css        Estilos.
 src/app/shell.html       Plantilla. tools/build.js mete dentro el motor, el modelo, la app y los 3 plugins.
 dist/AstraEditor.html    Resultado: un único archivo.

@@ -241,3 +241,39 @@ kbd{padding:1px 5px;border-radius:4px;border:1px solid var(--line);background:#0
 .icwrap canvas{image-rendering:pixelated;border:1px solid var(--line);border-radius:6px;cursor:crosshair}
 #icBig{cursor:default}
 .dbhero .sub .btn{margin-left:8px}
+/* 🌐 galería de FE Essentials */
+.gallerybtn{flex-direction:column;align-items:center;padding:14px;font-size:16px}
+.gallerybtn small{font-weight:400;opacity:.8;font-size:12px}
+.awin.gallery{width:min(1400px,97vw);height:min(900px,95vh)}
+.gbar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.gbar .tabs{margin:0}
+.gbar select,.gbar input{padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:inherit;font:inherit}
+.gbar select{max-width:340px}
+.gbar input{width:200px}
+.gbody{flex:1;overflow:auto;padding:14px 16px;min-height:0}
+.gwait{text-align:center;margin-top:40px}
+.ggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.ggrid.icon{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+.ggrid.map{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
+.gcard{display:flex;flex-direction:column;gap:6px;padding:10px;border-radius:12px;background:var(--panel2);border:1px solid var(--line)}
+.gcard:hover{border-color:var(--gold)}
+.gname{display:flex;flex-direction:column;min-width:0}
+.gname b,.gname small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gname b{font-size:13px}.gname small{font-size:11px;opacity:.7}
+.gprev{display:flex;align-items:flex-end;justify-content:center;background:#a8d0a0;border-radius:8px;overflow:hidden}
+.gprev img{image-rendering:pixelated;display:block;flex-shrink:0}
+.gprev.anim{height:150px;align-items:center}
+.gprev.anim img{width:240px;max-width:none}
+.gprev.map{height:64px;align-items:flex-start;width:fit-content;margin:0 auto;min-width:64px;background:#a8d0a0}
+.gprev.portrait{height:160px;align-items:flex-end}
+.gprev.portrait img{max-width:100%;max-height:160px}
+.gprev.portrait.crop{justify-content:flex-start;align-items:flex-start;width:144px;height:120px;margin:20px auto}
+.gprev.portrait.crop img{max-width:none;max-height:none}
+.gprev.icon{height:60px;align-items:center}
+.gw{display:flex;flex-wrap:wrap;gap:4px}
+.gw button{padding:2px 7px;border-radius:6px;border:1px solid var(--line);background:none;color:inherit;font-size:11px;cursor:pointer}
+.gw button.on{border-color:var(--gold);color:var(--gold2)}
+.gact{display:flex;gap:6px;margin-top:auto}
+.gact .gold{flex:1;justify-content:center}
+.gmore{text-align:center;margin:16px}
+a.btn{color:inherit;text-decoration:none}

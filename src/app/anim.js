@@ -102,7 +102,7 @@ Astra.imgTools={loadImage,pixels,cornerKey,removeKey,win,closeWin};
 // opts: {project, pack(): devuelve el paquete (lo crea si falta), done(nombre)}
 Astra.importAnimation=function(opts){
  const p=opts.project;
- const I={mirror:false,name:"",frames:[],cell:{w:0,h:0},anchor:{x:0,y:0},zoom:1,mode:"normal",tracks:{normal:{steps:[],impact:0},critical:null,miss:null},ranged:null,sheet:null,key:null,source:null,assign:{classId:0,wtype:""}};
+ const I={mirror:false,name:opts.name||"",frames:[],cell:{w:0,h:0},anchor:{x:0,y:0},zoom:1,mode:"normal",tracks:{normal:{steps:[],impact:0},critical:null,miss:null},ranged:null,sheet:null,key:null,source:null,assign:{classId:0,wtype:""}};
  let player=null;
  const shell=()=>{const w=win(`<header><h2>🎞 Importar animación de batalla</h2><span class="grow"></span><button class="btn small" data-x="close">✕</button></header>
   <div class="awbody"><div class="awleft" id="awLeft"></div><div class="awright" id="awRight"></div></div>

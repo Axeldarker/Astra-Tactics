@@ -79,13 +79,17 @@ Astra.detectImport=async function(files){
 };
 
 // ---------- abrir el importador de cada tipo ----------
-function openKind(kind,files){
- const p=P(),db=Astra.db,png=(files||[]).find(f=>/\.png$/i.test(f.name));
- if(kind==="anim")return Astra.importAnimation({project:p,pack:db.ensurePack,files,done:(name,assigned)=>{db.dirty("pack");if(assigned)db.dirty("classes");db.show("anims",name);Astra.ui.toast("🎞 Animación «"+name+"» importada. Recuerda guardar.");}});
- if(kind==="map")return Astra.importMapSprite({project:p,pack:db.ensurePack,file:png,done:(name,classId)=>{db.dirty("pack");if(classId){D.set("classes",p.classes[classId],"art",name);db.dirty("classes");}Astra.clearArtCache();db.show("classes",classId||undefined);Astra.ui.toast("🧍 Sprite «"+name+"» importado"+(classId?" y asignado a "+p.classes[classId].name:"")+". Recuerda guardar.");}});
- if(kind==="portrait")return Astra.importPortrait({project:p,pack:db.ensurePack,file:png,done:(name,actorId)=>{db.dirty("pack");db.show("actors",actorId);Astra.ui.toast("🙂 Retrato de "+((p.actors[actorId]||{}).name||"")+" importado. Recuerda guardar.");}});
- if(kind==="icon")return Astra.importItemIcon({project:p,pack:db.ensurePack,file:png,done:(target,label)=>{db.dirty("pack");const [g,id]=target.split(":");if(g==="weapon"||g==="item")db.show(g==="weapon"?"weapons":"items",Number(id));else db.show("weapons");Astra.ui.toast("⚔ Icono asignado a "+label+". Recuerda guardar.");}});
-}
+// extra: {name, classId, actorId, target, credit:{name,path,url}} (la galería rellena lo que sabe).
+Astra.importKind=function(kind,files,extra){
+ extra=extra||{};const p=P(),db=Astra.db,png=(files||[]).find(f=>/\.png$/i.test(f.name)),base={project:p,pack:db.ensurePack};
+ // Créditos: los recursos de FE Essentials piden crédito; se apuntan en el paquete (pack.credits).
+ const credit=()=>{if(!extra.credit)return;const pack=db.ensurePack();pack.credits=pack.credits||[];if(!pack.credits.some(c=>c.path===extra.credit.path))pack.credits.push(extra.credit);};
+ if(kind==="anim")return Astra.importAnimation(Object.assign(base,{files,name:extra.name,done:(name,assigned)=>{credit();db.dirty("pack");if(assigned)db.dirty("classes");db.show("anims",name);Astra.ui.toast("🎞 Animación «"+name+"» importada. Recuerda guardar.");}}));
+ if(kind==="map")return Astra.importMapSprite(Object.assign(base,{file:png,classId:extra.classId,done:(name,classId)=>{credit();db.dirty("pack");if(classId){D.set("classes",p.classes[classId],"art",name);db.dirty("classes");}Astra.clearArtCache();db.show("classes",classId||undefined);Astra.ui.toast("🧍 Sprite «"+name+"» importado"+(classId?" y asignado a "+p.classes[classId].name:"")+". Recuerda guardar.");}}));
+ if(kind==="portrait")return Astra.importPortrait(Object.assign(base,{file:png,actorId:extra.actorId,done:(name,actorId)=>{credit();db.dirty("pack");db.show("actors",actorId);Astra.ui.toast("🙂 Retrato de "+((p.actors[actorId]||{}).name||"")+" importado. Recuerda guardar.");}}));
+ if(kind==="icon")return Astra.importItemIcon(Object.assign(base,{file:png,target:extra.target,done:(target,label)=>{credit();db.dirty("pack");const [g,id]=target.split(":");if(g==="weapon"||g==="item")db.show(g==="weapon"?"weapons":"items",Number(id));else db.show("weapons");Astra.ui.toast("⚔ Icono asignado a "+label+". Recuerda guardar.");}}));
+};
+const openKind=(kind,files)=>Astra.importKind(kind,files);
 
 // ---------- ventana principal ----------
 Astra.openImport=function(initial){
@@ -93,6 +97,7 @@ Astra.openImport=function(initial){
  const {win,closeWin}=tools();let busy=false;
  const w=win(`<header><h2>📥 Importar</h2><span class="grow"></span><button class="btn small" data-x="close">✕</button></header>
   <div class="awbody single"><div class="imphub">
+   <button class="btn gold big gallerybtn" data-x="gallery">🌐 Explorar la galería de FE Essentials<small>Animaciones, sprites, retratos e iconos con su botón 📥 Importar</small></button>
    <div class="drop" id="ihDrop"><div class="big">📥</div><p><b>Arrastra aquí lo que quieras importar</b>: un PNG, un .zip, el .txt con sus PNG o una carpeta entera.</p>
     <p class="help">Astra adivina si es una animación de batalla, un sprite de mapa, un retrato o un icono.</p>
     <div class="chips center"><label class="btn small">📄 Elegir archivos<input type="file" multiple hidden data-in="1"></label><label class="btn small">📁 Elegir carpeta<input type="file" webkitdirectory hidden data-in="1"></label></div></div>
@@ -123,7 +128,7 @@ Astra.openImport=function(initial){
  async function fromUrl(){if(busy)return;const url=$("ihUrl").value;busy=true;try{const files=await Astra.fetchImport(url,t=>hint(t));busy=false;await take(files);}catch(e){busy=false;hint("✖ "+e.message,true);}}
  w.onclick=e=>{const b=e.target.closest("[data-x],[data-kind]");if(!b)return;
   if(b.dataset.kind)return openKind(b.dataset.kind,loaded||[]);
-  if(b.dataset.x==="close")return closeWin();if(b.dataset.x==="url")return fromUrl();};
+  if(b.dataset.x==="close")return closeWin();if(b.dataset.x==="url")return fromUrl();if(b.dataset.x==="gallery")return Astra.openGallery();};
  if(initial&&initial.length)take(initial);
 };
 

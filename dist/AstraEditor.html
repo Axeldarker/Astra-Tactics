@@ -247,6 +247,42 @@ kbd{padding:1px 5px;border-radius:4px;border:1px solid var(--line);background:#0
 .icwrap canvas{image-rendering:pixelated;border:1px solid var(--line);border-radius:6px;cursor:crosshair}
 #icBig{cursor:default}
 .dbhero .sub .btn{margin-left:8px}
+/* 🌐 galería de FE Essentials */
+.gallerybtn{flex-direction:column;align-items:center;padding:14px;font-size:16px}
+.gallerybtn small{font-weight:400;opacity:.8;font-size:12px}
+.awin.gallery{width:min(1400px,97vw);height:min(900px,95vh)}
+.gbar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.gbar .tabs{margin:0}
+.gbar select,.gbar input{padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:inherit;font:inherit}
+.gbar select{max-width:340px}
+.gbar input{width:200px}
+.gbody{flex:1;overflow:auto;padding:14px 16px;min-height:0}
+.gwait{text-align:center;margin-top:40px}
+.ggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.ggrid.icon{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+.ggrid.map{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
+.gcard{display:flex;flex-direction:column;gap:6px;padding:10px;border-radius:12px;background:var(--panel2);border:1px solid var(--line)}
+.gcard:hover{border-color:var(--gold)}
+.gname{display:flex;flex-direction:column;min-width:0}
+.gname b,.gname small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gname b{font-size:13px}.gname small{font-size:11px;opacity:.7}
+.gprev{display:flex;align-items:flex-end;justify-content:center;background:#a8d0a0;border-radius:8px;overflow:hidden}
+.gprev img{image-rendering:pixelated;display:block;flex-shrink:0}
+.gprev.anim{height:150px;align-items:center}
+.gprev.anim img{width:240px;max-width:none}
+.gprev.map{height:64px;align-items:flex-start;width:fit-content;margin:0 auto;min-width:64px;background:#a8d0a0}
+.gprev.portrait{height:160px;align-items:flex-end}
+.gprev.portrait img{max-width:100%;max-height:160px}
+.gprev.portrait.crop{justify-content:flex-start;align-items:flex-start;width:144px;height:120px;margin:20px auto}
+.gprev.portrait.crop img{max-width:none;max-height:none}
+.gprev.icon{height:60px;align-items:center}
+.gw{display:flex;flex-wrap:wrap;gap:4px}
+.gw button{padding:2px 7px;border-radius:6px;border:1px solid var(--line);background:none;color:inherit;font-size:11px;cursor:pointer}
+.gw button.on{border-color:var(--gold);color:var(--gold2)}
+.gact{display:flex;gap:6px;margin-top:auto}
+.gact .gold{flex:1;justify-content:center}
+.gmore{text-align:center;margin:16px}
+a.btn{color:inherit;text-decoration:none}
 </style>
 </head>
 <body>
@@ -2768,7 +2804,7 @@ Astra.imgTools={loadImage,pixels,cornerKey,removeKey,win,closeWin};
 // opts: {project, pack(): devuelve el paquete (lo crea si falta), done(nombre)}
 Astra.importAnimation=function(opts){
  const p=opts.project;
- const I={mirror:false,name:"",frames:[],cell:{w:0,h:0},anchor:{x:0,y:0},zoom:1,mode:"normal",tracks:{normal:{steps:[],impact:0},critical:null,miss:null},ranged:null,sheet:null,key:null,source:null,assign:{classId:0,wtype:""}};
+ const I={mirror:false,name:opts.name||"",frames:[],cell:{w:0,h:0},anchor:{x:0,y:0},zoom:1,mode:"normal",tracks:{normal:{steps:[],impact:0},critical:null,miss:null},ranged:null,sheet:null,key:null,source:null,assign:{classId:0,wtype:""}};
  let player=null;
  const shell=()=>{const w=win(`<header><h2>🎞 Importar animación de batalla</h2><span class="grow"></span><button class="btn small" data-x="close">✕</button></header>
   <div class="awbody"><div class="awleft" id="awLeft"></div><div class="awright" id="awRight"></div></div>
@@ -3066,7 +3102,7 @@ function renderList(){
  const t=tab(),all=entries();if(DB.sel[t.id]===undefined||!all.some(e=>String(e.id)===String(DB.sel[t.id])))DB.sel[t.id]=all.length?(t.id==="teams"&&all[1]?all[1].id:all[0].id):null;
  const creatable=t.table||["terrain","presets"].indexOf(t.id)>=0;
  $("dbList").innerHTML=`<div class="dbsearch"><input id="dbFilter" placeholder="Buscar por nombre o ID…" value="${esc(DB.filter)}"></div><div class="dbitems" id="dbItems"></div>
-  <div class="dbactions">${creatable?`<button class="btn small" data-act="new">＋ Nuevo</button>`:""}${t.table||t.id==="presets"?`<button class="btn small" data-act="dup">⧉ Duplicar</button>`:""}${t.id==="anims"?`<button class="btn small gold" data-act="import">📤 Importar animación</button>`:""}${t.id==="presets"?`<button class="btn small danger" data-act="delpreset">🗑</button>`:""}</div>`;
+  <div class="dbactions">${creatable?`<button class="btn small" data-act="new">＋ Nuevo</button>`:""}${t.table||t.id==="presets"?`<button class="btn small" data-act="dup">⧉ Duplicar</button>`:""}${t.id==="anims"?`<button class="btn small gold" data-act="import">📤 Importar animación</button><button class="btn small" data-act="gallery" data-s="anim">🌐 Galería</button>`:""}${t.id==="presets"?`<button class="btn small danger" data-act="delpreset">🗑</button>`:""}</div>`;
  renderItems(all);
 }
 function renderItems(all){
@@ -3125,7 +3161,7 @@ function formHtml(t){
 const FORMS={
  actors(row,e,f){
   const p=P(),cls=p.db.classes[row.classId]||{},variants=Object.keys(cls.variants||{});
-  return hero(`<canvas class="portrait" width="96" height="96" data-actor="${row.id}"></canvas><canvas class="mini" width="48" height="48" data-class="${row.classId}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(cls.name||"sin clase")} <button class="btn small" data-act="portrait">🙂 Importar retrato</button>`)
+  return hero(`<canvas class="portrait" width="96" height="96" data-actor="${row.id}"></canvas><canvas class="mini" width="48" height="48" data-class="${row.classId}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(cls.name||"sin clase")} <button class="btn small" data-act="portrait">🙂 Importar retrato</button> <button class="btn small" data-act="gallery" data-s="portrait">🌐 Galería</button>`)
   +section("Datos",F.text("name","Nombre",row.name)+F.sel("classId","Clase",row.classId,refOpts("classes"),true)+F.num("initialLevel","Nivel inicial",row.initialLevel)
    +(variants.length?F.sel("variant","Variante de la clase",e.variant||"",[["","(normal)"]].concat(variants.map(v=>[v,v]))):"")
    +F.text("affinity","Afinidad",e.affinity)+F.text("group","Grupo",e.group)+F.color("color","Color",e.color||"#61adcf")+F.area("profile","Perfil",row.profile)+F.text("deathQuote","Frase al caer",e.deathQuote))
@@ -3139,7 +3175,7 @@ const FORMS={
   return hero(`<canvas class="portrait" width="96" height="96" data-class="${row.id}"></canvas><span class="teams3">${[1,2,3].map(tm=>`<canvas width="32" height="32" data-class="${row.id}" data-team="${tm}"></canvas>`).join("")}</span>`,row.name||"",`ID ${row.id} · ${esc(D.MOVE_TYPES[e.moveType]||e.moveType)}`)
   +section("Datos",F.text("name","Nombre",row.name)+F.sel("moveType","Tipo de movimiento",e.moveType,withCustom(D.MOVE_TYPES,e.moveType))
    +F.num("maxLevel","Nivel máximo",e.maxLevel,20)+F.num("promoteLevel","Nivel para promocionar",e.promoteLevel,10)+F.num("capacity","Capacidad de rescate",e.capacity)+F.num("vision","Visión (niebla)",e.vision)+F.text("tags","Etiquetas (coma)",(e.tags||[]).join(", "),'data-list="1"'))
-  +section("Sprite de mapa",`<div class="artrow"><select data-k="art" data-t="sel">${opt("","— ninguno —")}${arts.map(a=>opt(a,a,a===e.art)).join("")}${e.art&&arts.indexOf(e.art)<0?opt(e.art,e.art+" (no existe)",true):""}</select><button class="btn small" data-act="mapsprite">📤 Subir sprite</button></div>`)
+  +section("Sprite de mapa",`<div class="artrow"><select data-k="art" data-t="sel">${opt("","— ninguno —")}${arts.map(a=>opt(a,a,a===e.art)).join("")}${e.art&&arts.indexOf(e.art)<0?opt(e.art,e.art+" (no existe)",true):""}</select><button class="btn small" data-act="mapsprite">📤 Subir sprite</button><button class="btn small" data-act="gallery" data-s="map">🌐 Galería</button></div>`)
   +section("Estadísticas",statsTable([{label:"Bases",key:"stats",value:e.stats},{label:"Crecimientos %",key:"growth",value:e.growth},{label:"Bono al promocionar",key:"promotionBonus",value:e.promotionBonus||{}}]))
   +section("Armas y animaciones de batalla",`<div class="wtable"><div class="wh"><span>Arma</span><span>Usa</span><span>Rango inicial</span><span>Animación de batalla</span><span></span></div>${types.map(w=>{const on=(e.weaponTypes||[]).indexOf(w)>=0,entry=ba[w],cur=entry?String(typeof entry==="string"?entry:entry.normal||"").replace(/:(normal|critical|miss)$/,""):"",far=ba[w+":far"];
    return `<div class="wr${on?"":" off"}"><span>${esc(D.WEAPON_TYPES[w]||w)}</span><input type="checkbox" data-k="weaponTypes" data-t="wtype" data-s="${esc(w)}"${on?" checked":""}><input type="number" data-k="ranks" data-t="stat" data-s="${esc(w)}" value="${(e.ranks||{})[w]===undefined?"":(e.ranks||{})[w]}" ${on?"":"disabled"}>
@@ -3151,7 +3187,7 @@ const FORMS={
  },
  weapons(row,e){
   const p=P(),spells=Object.keys((p.pack&&p.pack.spells&&p.pack.spells.definitions)||{});
-  return hero(`<canvas class="portrait icon" width="96" height="96" data-item="weapon:${row.id}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(D.WEAPON_TYPES[e.category]||e.category)} <button class="btn small" data-act="icon">🖼 Importar icono</button>`)
+  return hero(`<canvas class="portrait icon" width="96" height="96" data-item="weapon:${row.id}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(D.WEAPON_TYPES[e.category]||e.category)} <button class="btn small" data-act="icon">🖼 Importar icono</button> <button class="btn small" data-act="gallery" data-s="icon">🌐 Galería</button>`)
   +section("Datos",F.text("name","Nombre",row.name)+F.area("description","Descripción",row.description)+F.num("iconIndex","Icono (IconSet)",row.iconIndex)+F.num("price","Precio",e.price))
   +section("Combate",`<div class="grid3">${F.sel("category","Tipo",e.category,withCustom(D.WEAPON_TYPES,e.category))+F.num("might","Poder",e.might)+F.num("hit","Golpe",e.hit)+F.num("crit","Crítico",e.crit)+F.num("weight","Peso",e.weight)+F.num("uses","Usos",e.uses)
    +F.num("minRange","Alcance mín.",e.minRange)+F.num("maxRange","Alcance máx.",e.maxRange)+F.num("rank","Rango necesario",e.rank)+F.num("hits","Golpes por ataque",e.hits,1)+F.bool("magic","Mágica (usa Mag/Res)",e.magic)}</div>`
@@ -3162,7 +3198,7 @@ const FORMS={
  },
  items(row,e){
   const p=P();
-  return hero(`<canvas class="portrait icon" width="96" height="96" data-item="item:${row.id}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(D.ITEM_EFFECTS[e.effect]||e.effect)} <button class="btn small" data-act="icon">🖼 Importar icono</button>`)
+  return hero(`<canvas class="portrait icon" width="96" height="96" data-item="item:${row.id}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(D.ITEM_EFFECTS[e.effect]||e.effect)} <button class="btn small" data-act="icon">🖼 Importar icono</button> <button class="btn small" data-act="gallery" data-s="icon">🌐 Galería</button>`)
   +section("Datos",F.text("name","Nombre",row.name)+F.area("description","Descripción",row.description)+F.num("iconIndex","Icono (IconSet)",row.iconIndex)+F.num("price","Precio",e.price)+F.num("uses","Usos (0 = infinito)",e.uses))
   +section("Efecto",F.sel("effect","Qué hace",e.effect,withCustom(D.ITEM_EFFECTS,e.effect))
    +(["heal","torch","boost","growth","rank"].indexOf(e.effect)>=0?F.num("power","Potencia",e.power):"")
@@ -3276,6 +3312,7 @@ async function onClick(ev){
   if(act==="delpreset"){const list=presets();if(!list[DB.sel.presets])return;if(!await Astra.ui.modal(`<h2>Borrar plantilla</h2><p>¿Borrar «${esc(list[DB.sel.presets].name)}»? Los ★ Enemigo que la usen por nombre dejarán de encontrarla.</p>`,[{label:"Cancelar",value:false},{label:"Borrar",value:true,cls:"danger"}]))return;list.splice(DB.sel.presets,1);DB.sel.presets=0;savePresets();render();return;}
   if(act==="import"){Astra.importAnimation({project:p,pack:ensurePack,done:(name,assigned)=>{dirty("pack");if(assigned)dirty("classes");DB.tab="anims";DB.sel.anims=name;DB.mode="normal";render();Astra.ui.toast("🎞 Animación «"+name+"» importada. Recuerda guardar.");}});return;}
   if(act==="mapsprite"){const row=p.classes[DB.sel.classes];Astra.importMapSprite({project:p,pack:ensurePack,classId:row.id,done:name=>{dirty("pack");D.set("classes",row,"art",name);dirty("classes");Astra.clearArtCache();render();Astra.ui.toast("🧍 Sprite «"+name+"» asignado a "+row.name);}});return;}
+  if(act==="gallery"){const sec=b.dataset.s,ctx=sec==="map"?{classId:DB.sel.classes}:sec==="portrait"?{actorId:DB.sel.actors}:sec==="icon"?{target:(DB.tab==="weapons"?"weapon:":"item:")+DB.sel[DB.tab]}:{};Astra.openGallery(sec,ctx);return;}
   if(act==="portrait"){const row=p.actors[DB.sel.actors];Astra.importPortrait({project:p,pack:ensurePack,actorId:row.id,done:()=>{dirty("pack");render();Astra.ui.toast("🙂 Retrato de "+row.name+" importado. Recuerda guardar.");}});return;}
   if(act==="icon"){const kind=DB.tab==="weapons"?"weapon":"item";Astra.importItemIcon({project:p,pack:ensurePack,target:kind+":"+DB.sel[DB.tab],done:(t,label)=>{dirty("pack");render();Astra.ui.toast("🖼 Icono asignado a "+label+". Recuerda guardar.");}});return;}
   if(act==="playanim"){if(b.dataset.s){DB.tab="anims";DB.sel.anims=b.dataset.s;DB.mode="normal";render();}return;}
@@ -3377,13 +3414,17 @@ Astra.detectImport=async function(files){
 };
 
 // ---------- abrir el importador de cada tipo ----------
-function openKind(kind,files){
- const p=P(),db=Astra.db,png=(files||[]).find(f=>/\.png$/i.test(f.name));
- if(kind==="anim")return Astra.importAnimation({project:p,pack:db.ensurePack,files,done:(name,assigned)=>{db.dirty("pack");if(assigned)db.dirty("classes");db.show("anims",name);Astra.ui.toast("🎞 Animación «"+name+"» importada. Recuerda guardar.");}});
- if(kind==="map")return Astra.importMapSprite({project:p,pack:db.ensurePack,file:png,done:(name,classId)=>{db.dirty("pack");if(classId){D.set("classes",p.classes[classId],"art",name);db.dirty("classes");}Astra.clearArtCache();db.show("classes",classId||undefined);Astra.ui.toast("🧍 Sprite «"+name+"» importado"+(classId?" y asignado a "+p.classes[classId].name:"")+". Recuerda guardar.");}});
- if(kind==="portrait")return Astra.importPortrait({project:p,pack:db.ensurePack,file:png,done:(name,actorId)=>{db.dirty("pack");db.show("actors",actorId);Astra.ui.toast("🙂 Retrato de "+((p.actors[actorId]||{}).name||"")+" importado. Recuerda guardar.");}});
- if(kind==="icon")return Astra.importItemIcon({project:p,pack:db.ensurePack,file:png,done:(target,label)=>{db.dirty("pack");const [g,id]=target.split(":");if(g==="weapon"||g==="item")db.show(g==="weapon"?"weapons":"items",Number(id));else db.show("weapons");Astra.ui.toast("⚔ Icono asignado a "+label+". Recuerda guardar.");}});
-}
+// extra: {name, classId, actorId, target, credit:{name,path,url}} (la galería rellena lo que sabe).
+Astra.importKind=function(kind,files,extra){
+ extra=extra||{};const p=P(),db=Astra.db,png=(files||[]).find(f=>/\.png$/i.test(f.name)),base={project:p,pack:db.ensurePack};
+ // Créditos: los recursos de FE Essentials piden crédito; se apuntan en el paquete (pack.credits).
+ const credit=()=>{if(!extra.credit)return;const pack=db.ensurePack();pack.credits=pack.credits||[];if(!pack.credits.some(c=>c.path===extra.credit.path))pack.credits.push(extra.credit);};
+ if(kind==="anim")return Astra.importAnimation(Object.assign(base,{files,name:extra.name,done:(name,assigned)=>{credit();db.dirty("pack");if(assigned)db.dirty("classes");db.show("anims",name);Astra.ui.toast("🎞 Animación «"+name+"» importada. Recuerda guardar.");}}));
+ if(kind==="map")return Astra.importMapSprite(Object.assign(base,{file:png,classId:extra.classId,done:(name,classId)=>{credit();db.dirty("pack");if(classId){D.set("classes",p.classes[classId],"art",name);db.dirty("classes");}Astra.clearArtCache();db.show("classes",classId||undefined);Astra.ui.toast("🧍 Sprite «"+name+"» importado"+(classId?" y asignado a "+p.classes[classId].name:"")+". Recuerda guardar.");}}));
+ if(kind==="portrait")return Astra.importPortrait(Object.assign(base,{file:png,actorId:extra.actorId,done:(name,actorId)=>{credit();db.dirty("pack");db.show("actors",actorId);Astra.ui.toast("🙂 Retrato de "+((p.actors[actorId]||{}).name||"")+" importado. Recuerda guardar.");}}));
+ if(kind==="icon")return Astra.importItemIcon(Object.assign(base,{file:png,target:extra.target,done:(target,label)=>{credit();db.dirty("pack");const [g,id]=target.split(":");if(g==="weapon"||g==="item")db.show(g==="weapon"?"weapons":"items",Number(id));else db.show("weapons");Astra.ui.toast("⚔ Icono asignado a "+label+". Recuerda guardar.");}}));
+};
+const openKind=(kind,files)=>Astra.importKind(kind,files);
 
 // ---------- ventana principal ----------
 Astra.openImport=function(initial){
@@ -3391,6 +3432,7 @@ Astra.openImport=function(initial){
  const {win,closeWin}=tools();let busy=false;
  const w=win(`<header><h2>📥 Importar</h2><span class="grow"></span><button class="btn small" data-x="close">✕</button></header>
   <div class="awbody single"><div class="imphub">
+   <button class="btn gold big gallerybtn" data-x="gallery">🌐 Explorar la galería de FE Essentials<small>Animaciones, sprites, retratos e iconos con su botón 📥 Importar</small></button>
    <div class="drop" id="ihDrop"><div class="big">📥</div><p><b>Arrastra aquí lo que quieras importar</b>: un PNG, un .zip, el .txt con sus PNG o una carpeta entera.</p>
     <p class="help">Astra adivina si es una animación de batalla, un sprite de mapa, un retrato o un icono.</p>
     <div class="chips center"><label class="btn small">📄 Elegir archivos<input type="file" multiple hidden data-in="1"></label><label class="btn small">📁 Elegir carpeta<input type="file" webkitdirectory hidden data-in="1"></label></div></div>
@@ -3421,7 +3463,7 @@ Astra.openImport=function(initial){
  async function fromUrl(){if(busy)return;const url=$("ihUrl").value;busy=true;try{const files=await Astra.fetchImport(url,t=>hint(t));busy=false;await take(files);}catch(e){busy=false;hint("✖ "+e.message,true);}}
  w.onclick=e=>{const b=e.target.closest("[data-x],[data-kind]");if(!b)return;
   if(b.dataset.kind)return openKind(b.dataset.kind,loaded||[]);
-  if(b.dataset.x==="close")return closeWin();if(b.dataset.x==="url")return fromUrl();};
+  if(b.dataset.x==="close")return closeWin();if(b.dataset.x==="url")return fromUrl();if(b.dataset.x==="gallery")return Astra.openGallery();};
  if(initial&&initial.length)take(initial);
 };
 
@@ -3503,6 +3545,147 @@ function boot(){
  window.addEventListener("drop",async e=>{if(e.defaultPrevented||!hasFiles(e)||!P())return;e.preventDefault();const files=await Astra.droppedFiles(e.dataTransfer);if(files.length)Astra.openImport(files);});
 }
 boot();
+})();
+
+// Astra Editor · 🌐 Galería de FE Essentials.
+// feessentials.com muestra los recursos del FE Repo de GitHub (Klokinator/FE-Repo). La galería lee ese mismo
+// repositorio desde el navegador: una consulta por sección y otra por categoría (se guardan 12 h, porque GitHub
+// permite 60 por hora sin cuenta). Los archivos se bajan de raw.githubusercontent.com y pasan al importador de cada tipo.
+"use strict";
+(function(){
+const Astra=window.Astra,T=window.Tactics;
+const esc=s=>Astra.ui.esc(s);
+const $=id=>document.getElementById(id);
+const REPO="Klokinator/FE-Repo",API="https://api.github.com/repos/"+REPO,RAW="https://raw.githubusercontent.com/"+REPO+"/main/";
+const enc=p=>p.split("/").map(encodeURIComponent).join("/");
+const rawUrl=p=>RAW+enc(p);
+Astra.feRawUrl=rawUrl;
+const SECTIONS={
+ anim:{root:"Battle Animations",label:"🎞 Animaciones",kind:"anim"},
+ map:{root:"Map Sprites",label:"🧍 Sprites de mapa",kind:"map"},
+ portrait:{root:"Portrait Repository",label:"🙂 Retratos",kind:"portrait"},
+ icon:{root:"Item Icons",label:"⚔ Iconos",kind:"icon"}
+};
+const PAGE={anim:60,map:120,portrait:90,icon:400};
+
+// ---------- GitHub con caché ----------
+async function api(url,key){
+ const k="astra.fe:"+key;
+ try{const c=JSON.parse(localStorage.getItem(k)||"null");if(c&&Date.now()-c.t<12*3600e3)return c.d;}catch(e){}
+ let res;try{res=await fetch(url);}catch(e){throw new Error("No pude conectar con GitHub. ¿Hay internet?");}
+ if(res.status===403||res.status===429){const reset=Number(res.headers.get("x-ratelimit-reset"))*1000;
+  throw new Error("GitHub permite 60 consultas por hora sin cuenta y ya se gastaron"+(reset?"; vuelve a probar a las "+new Date(reset).toTimeString().slice(0,5):"")+". Lo que ya abriste queda guardado.");}
+ T.assert(res.ok,"GitHub respondió "+res.status+".");
+ const d=key.startsWith("t:")?compactTree(await res.json()):(await res.json()).filter(x=>x.type==="dir").map(x=>({name:x.name,sha:x.sha}));
+ try{localStorage.setItem(k,JSON.stringify({t:Date.now(),d}));}catch(e){}
+ return d;
+}
+const compactTree=j=>({truncated:!!j.truncated,files:(j.tree||[]).filter(e=>e.type==="blob").map(e=>e.path)});
+const categories=sec=>api(API+"/contents/"+enc(SECTIONS[sec].root)+"?ref=main","c:"+sec);
+const tree=cat=>api(API+"/git/trees/"+cat.sha+"?recursive=1","t:"+cat.sha);
+
+// ---------- de la lista de archivos a tarjetas ----------
+const fileName=p=>p.split("/").pop();
+const noExt=n=>n.replace(/\.[a-z0-9]+$/i,"");
+// "[Hero-Reskin] Fox Ears [F] by UltraFenix" → "Fox Ears"; "Hero (F) Axe {Pikmin} - stand" → "Hero (F) Axe"
+const clean=n=>noExt(n).replace(/\[[^\]]*\]|\{[^}]*\}/g,"").replace(/\bby\s+.*$/i,"").replace(/[-_ ]+(stand|standing|idle)\s*$/i,"").replace(/\s+/g," ").trim()||noExt(n);
+const authors=n=>{const m=[...n.matchAll(/\{([^}]*)\}/g)].map(x=>x[1]),by=n.match(/\bby\s+([^[\](){}]+)/i);return m.concat(by?[by[1].trim()]:[]).join(", ");};
+function assetsOf(sec,cat,files){
+ const base=SECTIONS[sec].root+"/"+cat.name+"/";
+ if(sec==="anim"){
+  const by={};files.forEach(f=>{const i=f.indexOf("/");if(i<0)return;const a=f.slice(0,i);(by[a]=by[a]||[]).push(f.slice(i+1));});
+  return Object.keys(by).sort((x,y)=>x.localeCompare(y)).map(a=>{
+   const groups={};by[a].forEach(f=>{const i=f.lastIndexOf("/"),dir=i<0?"":f.slice(0,i);(groups[dir]=groups[dir]||[]).push(f);});
+   const weapons=Object.keys(groups).filter(d=>groups[d].some(f=>/\.txt$/i.test(f))&&groups[d].some(f=>/\.png$/i.test(f))).sort((x,y)=>x.localeCompare(y,undefined,{numeric:true}))
+    .map(d=>{const g=groups[d],gif=g.find(f=>/\.gif$/i.test(f)),first=g.filter(f=>/\.png$/i.test(f)).sort()[0];
+     return {dir:d,label:(d.split("/").pop()||"Animación").replace(/^\d+\s*[.)-]\s*/,""),files:g.filter(f=>/\.(png|txt)$/i.test(f)&&!/sheet\s*\d*\.png$|_without_comment\.txt$/i.test(f)).map(f=>base+a+"/"+f),preview:base+a+"/"+(gif||first)};});
+   return {name:a,title:clean(a),author:authors(a),path:base+a,weapons};
+  }).filter(a=>a.weapons.length);
+ }
+ return files.filter(f=>/\.png$/i.test(f)&&!(sec==="map"&&/[-_ ](walk|move|moving)\s*$/i.test(noExt(fileName(f))))).sort((x,y)=>x.localeCompare(y))
+  .map(f=>({name:fileName(f),title:clean(fileName(f)),author:authors(f),path:base+f,group:f.includes("/")?f.slice(0,f.lastIndexOf("/")):""}));
+}
+
+// ---------- descargar ----------
+async function download(paths,hint){
+ const out=new Array(paths.length);let next=0,done=0;
+ const worker=async()=>{while(next<paths.length){const i=next++,p=paths[i];
+  let res;try{res=await fetch(rawUrl(p));}catch(e){throw new Error("No pude descargar "+fileName(p)+".");}
+  T.assert(res.ok,"No pude descargar "+fileName(p)+" ("+res.status+").");out[i]=new File([await res.blob()],fileName(p));hint("Descargando "+(++done)+"/"+paths.length+"…");}};
+ await Promise.all([...Array(Math.min(8,paths.length))].map(worker));
+ return out;
+}
+
+// ---------- ventana ----------
+const G=Astra.galleryState={sec:"anim",cat:{},find:"",limit:0,assets:[],pick:{}};
+Astra.openGallery=function(sec,ctx){
+ const p=Astra.state.project;if(!p)return Astra.ui.toast("Primero abre tu proyecto.");
+ const {win,closeWin}=Astra.imgTools;
+ if(sec&&SECTIONS[sec])G.sec=sec;G.ctx=ctx||{};G.find="";
+ const w=win(`<header><h2>🌐 Galería · FE Essentials</h2><span class="grow"></span><a class="btn small" href="https://feessentials.com/" target="_blank" rel="noopener">Abrir feessentials.com ↗</a><button class="btn small" data-x="close">✕</button></header>
+  <div class="gbar"><div class="tabs" id="gTabs"></div><select id="gCat"></select><input id="gFind" type="search" placeholder="Buscar…"><span class="help" id="gCount"></span></div>
+  <div class="gbody" id="gBody"></div>
+  <footer><span class="help" id="gHint">Recursos del FE Repo, los mismos de feessentials.com. Son F2U: gratis para fangames, sin uso comercial y dando crédito (Astra apunta los créditos de lo que importas).</span><span class="grow"></span><button class="btn" data-x="close">Cerrar</button></footer>`);
+ w.querySelector(".awin").classList.add("gallery");
+ const hint=(t,bad)=>{const h=$("gHint");if(h){h.textContent=t;h.classList.toggle("error",!!bad);}};
+ const tabs=()=>{$("gTabs").innerHTML=Object.keys(SECTIONS).map(k=>`<button class="${G.sec===k?"on":""}" data-sec="${k}">${SECTIONS[k].label}</button>`).join("");};
+ async function loadSection(){
+  tabs();$("gCat").innerHTML=`<option>Cargando categorías…</option>`;$("gBody").innerHTML=`<p class="help gwait">Cargando…</p>`;
+  try{const cats=await categories(G.sec);T.assert(cats.length,"La sección está vacía.");
+   const cur=G.cat[G.sec]&&cats.find(c=>c.name===G.cat[G.sec])||cats[0];G.cat[G.sec]=cur.name;
+   $("gCat").innerHTML=cats.map(c=>`<option value="${esc(c.name)}"${c===cur?" selected":""}>${esc(c.name)}</option>`).join("");
+   G.cats=cats;await loadCat(cur);
+  }catch(e){$("gBody").innerHTML=`<p class="error gwait">✖ ${esc(e.message)}</p>`;}
+ }
+ async function loadCat(cat){
+  $("gBody").innerHTML=`<p class="help gwait">Cargando ${esc(cat.name)}…</p>`;
+  try{const t=await tree(cat);G.assets=assetsOf(G.sec,cat,t.files);G.limit=PAGE[G.sec];G.pick={};render();if(t.truncated)hint("⚠ Esta categoría es enorme y GitHub solo devolvió una parte.",true);}
+  catch(e){$("gBody").innerHTML=`<p class="error gwait">✖ ${esc(e.message)}</p>`;}
+ }
+ const visible=()=>{const q=G.find.trim().toLowerCase();return G.assets.map((a,i)=>[a,i]).filter(([a])=>!q||(a.name+" "+(a.group||"")).toLowerCase().includes(q));};
+ function card(a,i){
+  const imp=`<button class="btn small gold" data-imp="${i}">📥 Importar</button><button class="btn small" data-credit="${i}" title="Copiar créditos">📋</button>`;
+  if(G.sec==="anim"){const k=G.pick[i]||0,wp=a.weapons[k];
+   return `<div class="gcard"><div class="gname" title="${esc(a.name)}"><b>${esc(a.title)}</b><small>${esc(a.author||a.name)}</small></div>
+    <div class="gprev anim"><img src="${esc(rawUrl(wp.preview))}" loading="lazy" alt=""></div>
+    <div class="gw">${a.weapons.map((x,j)=>`<button class="${j===k?"on":""}" data-w="${i}:${j}" title="${esc(x.dir||x.label)}">${esc(x.label)}</button>`).join("")}</div><div class="gact">${imp}</div></div>`;}
+  const cls=G.sec==="icon"?"icon":G.sec==="map"?"map":"portrait";
+  return `<div class="gcard ${cls}"><div class="gname" title="${esc(a.path)}"><b>${esc(a.title)}</b>${G.sec==="icon"?"":`<small>${esc(a.author||a.group||"")}</small>`}</div>
+   <div class="gprev ${cls}"><img src="${esc(rawUrl(a.path))}" loading="lazy" alt="" crossorigin="anonymous" data-fit="${cls}"></div><div class="gact">${imp}</div></div>`;
+ }
+ function render(){
+  const list=visible();$("gCount").textContent=list.length+" recursos";
+  $("gBody").innerHTML=`<div class="ggrid ${G.sec}">${list.slice(0,G.limit).map(([a,i])=>card(a,i)).join("")}</div>`+(list.length>G.limit?`<div class="gmore"><button class="btn" data-x="more">Mostrar más (${list.length-G.limit})</button></div>`:"")+(list.length?"":`<p class="help gwait">Nada por aquí.</p>`);
+ }
+ // Encaja la vista previa: sprites de mapa (solo el primer fotograma) y hojas de retrato GBA (la cara grande).
+ if(!w.dataset.gfit)w.dataset.gfit="1",w.addEventListener("load",e=>{const im=e.target;if(im.tagName!=="IMG"||!im.dataset.fit)return;if(unkey(im))return;const W=im.naturalWidth,H=im.naturalHeight,box=im.parentNode;
+  if(im.dataset.fit==="map"){const fh=W<=64&&H>=W*2.5?H/3:H,k=Math.max(1,Math.floor(Math.min(64/W,64/fh)));im.style.width=W*k+"px";box.style.height=fh*k+"px";}
+  else if(im.dataset.fit==="portrait"&&W===128&&H===112){im.style.width="192px";box.classList.add("crop");}
+  else if(im.dataset.fit==="icon"){const k=Math.max(1,Math.floor(48/Math.max(W,H)));im.style.width=W*k+"px";}},true);
+ // El color de fondo de GBA (el del píxel de la esquina) se vuelve transparente, como al importar.
+ function unkey(im){if(im.dataset.keyed)return false;im.dataset.keyed="1";
+  try{const c=document.createElement("canvas");c.width=im.naturalWidth;c.height=im.naturalHeight;c.getContext("2d").drawImage(im,0,0);const t=Astra.imgTools;t.removeKey(c,t.cornerKey(c));im.src=c.toDataURL();return true;}catch(err){return false;}}
+ async function importAsset(i,btn){
+  const a=G.assets[i],sec=G.sec,credit={name:a.name,path:a.path,url:"https://github.com/"+REPO+"/tree/main/"+enc(a.path),author:a.author};
+  try{
+   if(sec==="anim"){const wp=a.weapons[G.pick[i]||0],files=await download(wp.files,hint);Astra.importKind("anim",files,{name:a.title+(a.weapons.length>1?"-"+wp.label:""),credit:Object.assign(credit,{path:a.path+(wp.dir?"/"+wp.dir:"")})});return;}
+   const [file]=await download([a.path],hint),named=new File([file],a.title+".png");
+   Astra.importKind(SECTIONS[sec].kind,[named],Object.assign({credit},G.ctx));
+  }catch(e){hint("✖ "+e.message,true);if(btn){btn.disabled=false;btn.textContent="📥 Importar";}}
+ }
+ w.onclick=async e=>{const b=e.target.closest("[data-x],[data-sec],[data-w],[data-imp],[data-credit]");if(!b)return;
+  if(b.dataset.x==="close")return closeWin();
+  if(b.dataset.x==="more"){G.limit+=PAGE[G.sec];return render();}
+  if(b.dataset.sec){G.sec=b.dataset.sec;G.find="";$("gFind").value="";return loadSection();}
+  if(b.dataset.w){const [i,j]=b.dataset.w.split(":").map(Number);G.pick[i]=j;const c=b.closest(".gcard"),a=G.assets[i];c.querySelector(".gprev img").src=rawUrl(a.weapons[j].preview);c.querySelectorAll("[data-w]").forEach(x=>x.classList.toggle("on",x===b));return;}
+  if(b.dataset.imp!==undefined){b.disabled=true;b.textContent="⏳";return importAsset(Number(b.dataset.imp),b);}
+  if(b.dataset.credit!==undefined){const a=G.assets[Number(b.dataset.credit)],t=`${a.title}${a.author?" por "+a.author:""} (FE Repo: ${a.path})`;
+   try{await navigator.clipboard.writeText(t);hint("📋 Copiado: "+t);}catch(err){hint(t);}}
+ };
+ w.onchange=e=>{if(e.target.id==="gCat"){G.cat[G.sec]=e.target.value;G.find="";$("gFind").value="";loadCat(G.cats.find(c=>c.name===e.target.value));}};
+ w.oninput=e=>{if(e.target.id==="gFind"){G.find=e.target.value;G.limit=PAGE[G.sec];render();}};
+ loadSection();
+};
 })();
 </script>
 </body>
