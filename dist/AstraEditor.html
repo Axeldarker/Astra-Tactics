@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Astra Editor · FE8 Graphics (experimental)</title>
+<title>Astra Editor · FE8 Native Maps & Text Fix</title>
 <style>:root{--bg:#0a1226;--panel:#0e1a35;--panel2:#15254a;--line:#2b3c66;--gold:#d2b567;--gold2:#f3d79b;--text:#eee8d5;--muted:#9fabc8;--blue:#5ec8e6;--red:#e8797c;--green:#8fdcaa;--violet:#b59de2;--radius:10px}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.4 "Segoe UI",system-ui,-apple-system,sans-serif;overflow:hidden}
@@ -2198,6 +2198,8 @@ if(typeof module!=="undefined"&&module.exports)module.exports=T;
 })(typeof globalThis!=="undefined"?globalThis:this);
 
 /* TacticsMZ | Copyright (c) 2026 TacticsMZ contributors | MIT License */
+/* TacticsMZ | Copyright (c) 2026 TacticsMZ contributors | MIT License */
+/* TacticsMZ | Copyright (c) 2026 TacticsMZ contributors | MIT License */
 // Astra Editor · importador de hacks de Fire Emblem: The Sacred Stones (FE8, versión USA).
 // Lógica sin interfaz (se prueba en Node). El usuario aporta SU ROM limpia y el parche del hack
 // (.ups o .bps) o la ROM ya parcheada. Astra compara las dos y solo trae lo que el hack cambió:
@@ -2212,7 +2214,7 @@ R.FE8U={code:"BE8E",crc:0xA47246AE,
  characters:{addr:0x08803D30,size:0x34,count:255,numberAt:4},
  classes:{addr:0x08807110,size:0x54,count:255,numberAt:4},
  items:{addr:0x08809B10,size:0x24,count:256,numberAt:6},
- chapters:{addr:0x088B0890,size:0x94,count:128},
+ chapters:{addr:0x088B0890,size:0x94,count:79},
  assets:0x088B363C,text:0x0815D48C,textPointer:0xA2A0,huffman:[0x6DC,0x6E0]};
 
 // ---------- bytes ----------
@@ -2282,7 +2284,7 @@ function huffman(rom,tree,rootNode,at,limit){
   if(++steps>40000||node<0||node+4>rom.length||at>rom.length)return null;
   const l=u16(rom,node),r=u16(rom,node+2);
   if(r&0x8000){const lo=l&0xFF,hi=l>>8;if(!lo)break;out.push(lo);if(hi)out.push(hi);if(out.length>=limit)break;node=rootNode;continue;}
-  if(!bits){cur=rom[at++];bits=8;}
+  if(!bits){if(at>=rom.length)return null;cur=rom[at++];bits=8;}
   const bit=cur&1;cur>>=1;bits--;node=tree+(bit?r:l)*4;
  }
  return out;
@@ -2292,6 +2294,7 @@ function textReader(rom,table,tree,rootNode){
  const cache={};
  return function(id){
   if(cache[id]!==undefined)return cache[id];
+  if(!Number.isInteger(id)||id<0||table<0||table+id*4+4>rom.length)return "";
   const p=u32(rom,table+id*4);let bytes=null;
   if(p&0x80000000){const o=off(rom,(p&0x7FFFFFFF)>>>0);if(o>=0)bytes=rawText(rom,o,4000);}
   else{const o=off(rom,p);if(o>=0&&tree>=0)bytes=huffman(rom,tree,rootNode,o,4000);}
@@ -2333,7 +2336,7 @@ R.open=function(rom,base){
   return off(rom,relocate(rom,ctx.refs[key]||[],addr));};
  ["characters","classes","items","chapters","assets","text"].forEach(k=>{ctx[k+"At"]=place(k);});
  // La tabla de textos también se lee en 0xA2A0.
- if(base){const t=u32(rom,F.textPointer);if(isPtr(rom,t))ctx.textAt=off(rom,t);}
+ {const t=u32(rom,F.textPointer);if(isPtr(rom,t))ctx.textAt=off(rom,t);}
  ["characters","classes","items"].forEach(k=>{const s=tableShift(rom,ctx[k+"At"],F[k]);ctx[k+"Shift"]=s.shift;if(s.score<6)ctx.errors.push("No encuentro la tabla de "+({characters:"personajes",classes:"clases",items:"objetos"})[k]+" en "+hex(ctx[k+"At"]+BASE)+".");});
  if(ctx.errors.length)return ctx;
  setupText(ctx,base);
@@ -2343,15 +2346,17 @@ R.open=function(rom,base){
 function setupText(ctx,base){
  const rom=ctx.rom,F=R.FE8U,nameOf=reader=>{const c=charRow(ctx,1);return c?reader(c.nameId):"";};
  const candidates=[];
+ // FE8U: 0x6E0 -> base del árbol; 0x6DC -> puntero al puntero del nodo raíz.
+ const tree=off(rom,u32(rom,F.huffman[1])),holder=off(rom,u32(rom,F.huffman[0]));
+ const root=holder>=0?off(rom,u32(rom,holder)):-1;
+ if(tree>=0&&root>=tree&&root+4<=rom.length)candidates.push({tree,root});
  if(base&&base.huffman)candidates.push(base.huffman);
- const a=u32(rom,F.huffman[0]),b=u32(rom,F.huffman[1]);
- [[a,b],[off(rom,a)>=0?u32(rom,off(rom,a)):0,b]].forEach(([t,r])=>{if(!isPtr(rom,t)||!isPtr(rom,r))return;const rp=u32(rom,off(rom,r));
-  candidates.push({tree:off(rom,t),root:off(rom,r)});if(isPtr(rom,rp))candidates.push({tree:off(rom,t),root:off(rom,rp)});});
- for(const c of candidates){const read=textReader(rom,ctx.textAt,c.tree,c.root);const n=nameOf(read);if(base?n.length>0:/^Eirika/.test(n)){ctx.huffman=c;ctx.text=read;return;}}
+ for(const c of candidates){const read=textReader(rom,ctx.textAt,c.tree,c.root);const n=nameOf(read);if((base||ctx.crc!==F.crc)?/^[A-Za-z][\x20-\x7E]{1,39}$/.test(n):n==="Eirika"){ctx.huffman=c;ctx.text=read;return;}}
  // Sin árbol válido: solo se leerán los textos sin comprimir (parche anti-Huffman).
  ctx.text=textReader(rom,ctx.textAt,-1,-1);
- if(!base)ctx.notes.push("No pude descifrar los textos comprimidos: los nombres que no estén en texto plano saldrán como «Personaje N».");
+ ctx.notes.push("No pude descifrar los textos comprimidos: los nombres que no estén en texto plano saldrán como «Personaje N».");
 }
+R.setupText=setupText;
 function charRow(ctx,id){const F=R.FE8U.characters,o=ctx.charactersAt+(id-ctx.charactersShift)*F.size;return o>=0&&ctx.rom[o+4]===id?{nameId:u16(ctx.rom,o)}:null;}
 
 // ---------- lectura de datos ----------
@@ -2360,18 +2365,19 @@ R.WEAPON_TYPES=WEAPON_TYPES;
 R.read=function(ctx){
  const rom=ctx.rom,F=R.FE8U,name=(id,fallback)=>ctx.text(id)||fallback;
  const ranks=o=>{const r={};for(let k=0;k<8;k++)if(rom[o+k]){const c=WEAPON_TYPES[k];r[c]=Math.max(r[c]||0,rom[o+k]);}return r;};
- const data={};
+ const data={},classDef=ctx.clean&&ctx.crc===F.crc?Object.assign({},F.classes,{count:(F.items.addr-F.classes.addr)/F.classes.size}):F.classes;
  data.characters=readTable(rom,ctx.charactersAt,F.characters,ctx.charactersShift,(o,id)=>({id,nameId:u16(rom,o),name:name(u16(rom,o),"Personaje "+id),classId:rom[o+5],portraitId:u16(rom,o+6),
   level:rom[o+0xB],bases:{health:s8(rom[o+0xC]),power:s8(rom[o+0xD]),skill:s8(rom[o+0xE]),speed:s8(rom[o+0xF]),defense:s8(rom[o+0x10]),resistance:s8(rom[o+0x11]),luck:s8(rom[o+0x12]),build:s8(rom[o+0x13])},
   ranks:ranks(o+0x14),growth:{health:rom[o+0x1C],power:rom[o+0x1D],skill:rom[o+0x1E],speed:rom[o+0x1F],defense:rom[o+0x20],resistance:rom[o+0x21],luck:rom[o+0x22]},
   attributes:u32(rom,o+0x28),compare:[0,0x28]}));
- data.classes=readTable(rom,ctx.classesAt,F.classes,ctx.classesShift,(o,id)=>({id,nameId:u16(rom,o),name:name(u16(rom,o),"Clase "+id),promotion:rom[o+5],smsId:rom[o+6],portraitId:u16(rom,o+8),
+ data.classes=readTable(rom,ctx.classesAt,classDef,ctx.classesShift,(o,id)=>({id,nameId:u16(rom,o),name:name(u16(rom,o),"Clase "+id),promotion:rom[o+5],smsId:rom[o+6],portraitId:u16(rom,o+8),
   bases:{health:rom[o+0xB],power:rom[o+0xC],skill:rom[o+0xD],speed:rom[o+0xE],defense:rom[o+0xF],resistance:rom[o+0x10],build:rom[o+0x11],move:rom[o+0x12]},
   growth:{health:rom[o+0x1B],power:rom[o+0x1C],skill:rom[o+0x1D],speed:rom[o+0x1E],defense:rom[o+0x1F],resistance:rom[o+0x20],luck:rom[o+0x21]},
   attributes:u32(rom,o+0x28),ranks:ranks(o+0x2C),compare:[0,0x34]}));
  data.items=readTable(rom,ctx.itemsAt,F.items,ctx.itemsShift,(o,id)=>{const type=rom[o+7],range=rom[o+0x19];
   return {id,nameId:u16(rom,o),name:name(u16(rom,o),"Objeto "+id),iconId:rom[o+0x1D],type,attributes:u32(rom,o+8),uses:rom[o+0x14],might:rom[o+0x15],hit:rom[o+0x16],weight:rom[o+0x17],crit:rom[o+0x18],
    minRange:range>>4,maxRange:range&0xF,cost:u16(rom,o+0x1A),rank:rom[o+0x1C],weapon:type<8&&!!(u32(rom,o+8)&5),compare:[0,0x0C,0x14,0x24]};});
+ if(ctx.clean&&ctx.crc===F.crc&&(!data.characters[1]||data.characters[1].name!=="Eirika"))ctx.errors.push("La ROM original se reconoció por CRC, pero no se pudo leer el nombre de Eirika. No se guardarán datos incorrectos.");
  data.chapters=readChapters(ctx);
  data.chapters.forEach(ch=>{ch.units=ch.units.filter(u=>{const c=data.characters[u.character];u.classId=u.classId||(c&&c.classId)||0;return u.team<=2&&!!data.classes[u.classId];});});
  return data;
@@ -2384,35 +2390,36 @@ function mapAt(ctx,i){const o=asset(ctx,i);if(o<0)return null;const d=R.lz77(ctx
  const tiles=[];for(let k=0;k<w*h;k++)tiles.push(u16(d,2+k*2));return {width:w,height:h,tiles};}
 function configAt(ctx,i){const o=asset(ctx,i);if(o<0)return null;const d=R.lz77(ctx.rom,o,0x4000);return d&&d.length>=0x2400?d:null;}
 // Campos del capítulo: se comprueba la disposición conocida (mapa en +8, configuración en +7) y si no cuadra se busca.
-function chapterLayout(ctx){
- const rom=ctx.rom,F=R.FE8U.chapters,score=(fieldOf,test)=>{let s=0;for(let c=0;c<Math.min(F.count,40);c++){const o=ctx.chaptersAt+c*F.size;if(o+F.size>rom.length)break;if(test(rom[o+fieldOf]))s++;}return s;};
- const pick=(pref,test)=>{const best={at:pref,s:score(pref,test)};if(best.s>=8)return best.at;for(let f=0;f<F.size;f++){const s=score(f,test);if(s>best.s){best.at=f;best.s=s;}}return best.s>=1?best.at:-1;};
- const map=pick(8,i=>!!mapAt(ctx,i)),config=pick(7,i=>!!configAt(ctx,i));
- const events=pick(0x74,i=>{const o=asset(ctx,i);return o>=0&&eventGroup(ctx,o).loads.length>0;});
- return {map,config,obj1:config-3,obj2:config-2,palette:config-1,events};
-}
-// Grupo de eventos del capítulo: punteros a listas y escenas. Se recorren las escenas buscando LOAD (cargar unidades).
-function eventGroup(ctx,o){
- const rom=ctx.rom,loads=[];let scene=-1;
- // +0x48: escena inicial en FE8. Si no hay LOAD ahí, se prueba cualquier puntero del grupo.
- const fields=[0x48].concat([...Array(0x14)].map((_,k)=>k*4).filter(f=>f!==0x48));
- for(const f of fields){const p=off(rom,u32(rom,o+f));if(p<0)continue;const w=walkScript(rom,p,0);if(w.ok&&w.loads.length){scene=f;w.loads.forEach(l=>loads.push(l));break;}}
- return {scene,loads};
-}
-// Códigos de evento de FE8: 2 bytes; byte alto = código, nibble alto del bajo = tamaño en medias palabras.
-function walkScript(rom,at,depth){
- const loads=[];let i=at;
- for(let steps=0;steps<3000;steps++){
-  if(i+2>rom.length)return {ok:false,loads};
-  const lo=rom[i],id=rom[i+1],size=(lo>>4)*2;
-  if(!size)return {ok:false,loads};
-  if(id===0x2C&&size>=8){const p=off(rom,u32(rom,i+4));if(p>=0)loads.push(p);}
-  if(id===0x0A&&size>=8&&depth<3){const p=off(rom,u32(rom,i+4));if(p>=0){const w=walkScript(rom,p,depth+1);if(w.ok)w.loads.forEach(l=>loads.push(l));}}
-  if(id===0x01)return {ok:true,loads};
-  i+=size;
+function chapterLayout(ctx){return {map:8,config:7,obj1:4,obj2:5,palette:6,events:0x74};}
+// Interpret the subset of introductory events relevant to map and unit loading.
+// Follow direct CALLs; ignore units loaded on cutscene maps; apply CLEAR operations.
+// Conditional control flow is deliberately not emulated. It is a best-effort initial placement.
+R.initialUnitLoads=function(rom,group,chapter){
+ const start=off(rom,u32(rom,group+0x48)),player=off(rom,u32(rom,group+0x28));
+ const state={map:chapter,loads:[],steps:0},active=new Set();
+ function walk(at,depth){
+  if(at<0||depth>8||active.has(at))return;active.add(at);
+  for(let i=at;i>=0&&i+4<=rom.length&&state.steps++<30000;){
+   const lo=rom[i],op=rom[i+1],len=(lo>>4)*2,sub=lo&15;
+   if(len<4||i+len>rom.length)break;
+   if(op===0x01)break;
+   if(op===0x25){const map=u16(rom,i+2);if(map!==state.map){state.map=map;state.loads=[];}}
+   if(op===0x34&&[0xA,0xB,0xC].includes(sub)){
+    const team={10:0,11:1,12:2}[sub];state.loads=state.loads.filter(l=>l.team!==team);
+   }
+   if(op===0x2C&&len>=8&&state.map===chapter){const p=off(rom,u32(rom,i+4));if(p>=0){for(const u of R.units(rom,p))state.loads.push(u);}}
+   if(op===0x0A&&len>=8)walk(off(rom,u32(rom,i+4)),depth+1);
+   i+=len;
+  }
+  active.delete(at);
  }
- return {ok:false,loads};
-}
+ walk(start,0);
+ // The chapter header provides the normal-mode player unit list. Prefer it over
+ // cutscene duplicates; use it if the intro uses dynamic LOAD pointers.
+ const allies=player>=0?R.units(rom,player).filter(u=>u.team===0):[];
+ if(allies.length)state.loads=allies.concat(state.loads.filter(u=>u.team!==0||!allies.some(a=>a.character===u.character)));
+ return state.loads;
+};
 // Definición de unidad de FE8: 20 bytes.
 R.units=function(rom,at){
  const out=[];
@@ -2421,7 +2428,7 @@ R.units=function(rom,at){
   const u={character:rom[o],classId:rom[o+1],leader:rom[o+2],autolevel:b3&1,team:(b3>>1)&3,level:b3>>3,x:pos&63,y:(pos>>6)&63,
    items:Array.from(rom.subarray(o+12,o+16)).filter(Boolean),ai:Array.from(rom.subarray(o+16,o+20))};
   // Si entra caminando (REDA), su sitio es la última parada.
-  const n=rom[o+7],rp=off(rom,u32(rom,o+8));if(n&&n<16&&rp>=0&&rp+n*8<=rom.length){const last=rp+(n-1)*8,packed=u16(rom,last);u.redaX=packed&63;u.redaY=(packed>>6)&63;u.redaBytes=[rom[last],rom[last+1]];}
+  const n=rom[o+7],rp=off(rom,u32(rom,o+8));if(n&&n<=64&&rp>=0&&rp+n*8<=rom.length){const last=rp+(n-1)*8;u.redaX=rom[last];u.redaY=rom[last+1];}
   out.push(u);}
  return out;
 };
@@ -2430,17 +2437,24 @@ function readChapters(ctx){
  if(L.map<0){ctx.errors.push("No encuentro los mapas de los capítulos.");return out;}
  for(let c=0;c<F.count;c++){const o=ctx.chaptersAt+c*F.size;if(o+F.size>rom.length)break;
   const map=mapAt(ctx,rom[o+L.map]);if(!map)continue;
+  const np=off(rom,u32(rom,o));if(np<0)continue;
   const ch={index:c,offset:o,bytes:Array.from(rom.subarray(o,o+F.size)),map,assets:{map:rom[o+L.map],config:L.config>=0?rom[o+L.config]:0,obj1:L.config>=0?rom[o+L.obj1]:0,obj2:L.config>=0?rom[o+L.obj2]:0,palette:L.config>=0?rom[o+L.palette]:0}};
-  const np=off(rom,u32(rom,o));ch.name=np>=0?printable(rawText(rom,np,40)):"";
-  if(!/^[\x20-\x7E]{2,40}$/.test(ch.name))ch.name="";
+  ch.name=printable(rawText(rom,np,40));
+  if(!/^[\x20-\x7E]{2,40}$/.test(ch.name))continue;
   const title=ctx.text(u16(rom,o+0x70));ch.internalName=ch.name;ch.name=title&&title.length>=2&&title.length<=80?title:ch.name||"Capítulo "+c;
   const cfg=ch.assets.config?configAt(ctx,ch.assets.config):null;
   ch.terrain=map.tiles.map(t=>cfg?cfg[0x2000+(t>>2)]||0:0);
   ch.units=[];
-  if(L.events>=0){const eo=asset(ctx,rom[o+L.events]);if(eo>=0){const g=eventGroup(ctx,eo);g.loads.forEach(l=>R.units(rom,l).forEach(u=>{
-   if(u.redaX!==undefined){if(u.redaX<map.width&&u.redaY<map.height){u.x=u.redaX;u.y=u.redaY;}else if(u.redaBytes[0]<map.width&&u.redaBytes[1]<map.height){u.x=u.redaBytes[0];u.y=u.redaBytes[1];}}
-   delete u.redaX;delete u.redaY;delete u.redaBytes;
-   if(u.x<map.width&&u.y<map.height&&!ch.units.some(v=>v.x===u.x&&v.y===u.y))ch.units.push(u);}));}}
+  if(L.events>=0){const eo=asset(ctx,rom[o+L.events]);if(eo>=0&&eo+0x50<=rom.length){
+   for(const u of R.initialUnitLoads(rom,eo,c)){
+    if(u.redaX!==undefined&&u.redaX<map.width&&u.redaY<map.height){u.x=u.redaX;u.y=u.redaY;}
+    delete u.redaX;delete u.redaY;
+    if(u.x>=map.width||u.y>=map.height||u.team>2)continue;
+    if(u.team===0&&ch.units.some(v=>v.team===0&&v.character===u.character))continue;
+    if(ch.units.some(v=>v.x===u.x&&v.y===u.y))continue;
+    ch.units.push(u);
+   }
+  }}
   out.push(ch);}
  return out;
 }
@@ -2497,7 +2511,8 @@ const stat=(o,k)=>Math.max(0,o[k]||0);
 R.apply=function(p,plan,opts){
  opts=opts||{};const ids={characters:{},classes:{},items:{}},report={classes:0,actors:0,weapons:0,items:0,maps:0,units:0,reused:0};
  // Stable FE IDs prevent merging separate classes or characters with the same display name.
- const used=new Set(),reuse=(list,table,source)=>{const rows=(list||[]).filter(Boolean),matches=rows.filter(x=>D.fields(x,table).fe8Source===opts.source&&D.fields(x,table).fe8Id===source.id),legacy=rows.filter(x=>x.name===source.name&&!D.fields(x,table).fe8Source&&!used.has(x));const r=matches[0]||(legacy.length===1&&opts.reuseNames!==false?legacy[0]:null);if(r){report.reused++;used.add(r);}return r;};
+ const placeholder=(table,id)=>(table==="actors"?"Personaje ":table==="classes"?"Clase ":"Objeto ")+id;
+ const used=new Set(),legacyPlaceholders=new Set(),reuse=(list,table,source)=>{const rows=(list||[]).filter(Boolean),matches=rows.filter(x=>D.fields(x,table).fe8Source===opts.source&&D.fields(x,table).fe8Id===source.id),legacy=rows.filter(x=>x.name===source.name&&!D.fields(x,table).fe8Source&&!used.has(x)),fallback=rows.filter(x=>x.name===placeholder(table,source.id)&&!D.fields(x,table).fe8Source&&!used.has(x));const r=matches[0]||(opts.reuseNames!==false?(legacy.length===1?legacy[0]:legacy.length===0&&fallback.length===1?fallback[0]:null):null);if(r){report.reused++;used.add(r);if(r.name===placeholder(table,source.id)){legacyPlaceholders.add(r);if(source.name!==r.name){D.set(table,r,"name",source.name);report.renamed=(report.renamed||0)+1;}}}return r;};
  const identify=(table,row,source)=>{if(opts.source){D.set(table,row,"fe8Source",opts.source);D.set(table,row,"fe8Id",source.id);}used.add(row);};
  // objetos y armas
  plan.items.forEach(it=>{const table=it.weapon?"weapons":"items",list=p[table];let row=reuse(list,table,it);
@@ -2528,29 +2543,31 @@ R.apply=function(p,plan,opts){
    if(Object.keys(c.ranks).length)D.set("actors",row,"ranks",c.ranks);
    const u=firstUnit[c.id];if(u&&u.items.length)D.set("actors",row,"inventory",u.items.map(i=>ids.items[i]).filter(Boolean));
    report.actors++;}
+  // Repair legacy imported actors which still point at an invalid/default class.
+  if(ids.classes[c.classId]&&((opts.source&&D.fields(row,"actors").fe8Source===opts.source)||legacyPlaceholders.has(row)&&opts.repairActors||!p.classes[row.classId]&&opts.repairActors))D.set("actors",row,"classId",ids.classes[c.classId]);
   identify("actors",row,c);ids.characters[c.id]=row.id;});
  // capítulos → mapas
  const maps=[],infos=p.mapInfos=p.mapInfos||[null];let nextId=Math.max(0,...infos.filter(Boolean).map(m=>m.id))+1,order=Math.max(0,...infos.filter(Boolean).map(m=>m.order||0))+1;
  const template=opts.template||{};
  plan.chapters.forEach(ch=>{
-  const id=nextId++,w=ch.map.width,h=ch.map.height,data=new Array(w*h*6).fill(0),ground=opts.nativePreview?0:(template.data||[])[0]||0;
+  const id=opts.replaceMapId&&plan.chapters.length===1?opts.replaceMapId:nextId++,w=ch.map.width,h=ch.map.height,data=new Array(w*h*6).fill(0),ground=0;
   for(let k=0;k<w*h;k++){data[k]=ground;data[5*w*h+k]=opts.terrainIds?(opts.terrainIds[ch.terrain[k]]||0):(ch.terrain[k]||0);}
   const map={autoplayBgm:false,autoplayBgs:false,battleback1Name:"",battleback2Name:"",bgm:{name:"",pan:0,pitch:100,volume:90},bgs:{name:"",pan:0,pitch:100,volume:90},disableDashing:false,
-   displayName:ch.name,encounterList:[],encounterStep:30,height:h,note:"",parallaxLoopX:false,parallaxLoopY:false,parallaxName:"",parallaxShow:true,parallaxSx:0,parallaxSy:0,
+   displayName:ch.name,encounterList:[],encounterStep:30,height:h,note:"<FE8Import:"+(opts.source||"unknown")+":"+ch.index+">",parallaxLoopX:false,parallaxLoopY:false,parallaxName:"",parallaxShow:true,parallaxSx:0,parallaxSy:0,
    scrollType:0,specifyBattleback:false,tilesetId:template.tilesetId||1,width:w,data,events:[null]};
   let throne=false;
   ch.terrain.forEach((t,k)=>{const kind=MARKERS[t];if(!kind)return;if(kind==="goal"){if(throne)return;throne=true;}const e=M.create(map,kind,k%w,Math.floor(k/w),{});if(kind==="shop"){M.removeCommand(e,"Shop");M.setCommand(e,"Interaction",{type:"shop",name:"Tienda (sin inventario importado)",stock:[]});}});
   ch.units.forEach(u=>{const cls=ids.classes[u.classId]||0,inv=u.items.map(i=>ids.items[i]).filter(Boolean),weapon=inv.find(i=>i.kind==="weapon"),item=inv.find(i=>i.kind==="item"),actor=ids.characters[u.character];
    const named=plan.characters.find(x=>x.id===u.character),boss=u.team===2&&isBossIn(plan,u);
    if(!cls){report.skippedUnits=(report.skippedUnits||0)+1;return;}
-   if(u.team===0&&actor)M.create(map,"ally",u.x,u.y,{actorId:actor,level:u.level,lord:!!(named&&named.attributes&0x2000)});
+   if(u.team===0&&actor&&Number(p.actors[actor].classId)===cls)M.create(map,"ally",u.x,u.y,{actorId:actor,level:u.level,lord:!!(named&&named.attributes&0x2000)});
    else if(u.team===2&&!boss&&!(named&&named.portraitId))M.create(map,"enemy",u.x,u.y,{classId:cls,level:u.level,role:u.ai[1]===3?"hold":"auto",weaponId:weapon?weapon.id:0,itemId:item?item.id:0});
    else{// jefes y unidades verdes: ★ Unidad con su personaje (sus estadísticas propias)
     const e=M.create(map,"enemy",u.x,u.y,{});M.removeCommand(e,"Enemy");
     M.setCommand(e,"Unit",{actorId:actor||0,classId:cls,name:named?named.name:"",team:u.team===2?"2":u.team===0?"1":"3",level:u.level,weaponId:weapon?weapon.id:0,itemId:item?item.id:0,ai:boss||u.ai[1]===3?"hold":"approach",boss});}
    report.units++;});
   M.setCommand(M.missionEvent(map,true),"Mission",{title:ch.name,objective:throne?"seize":"eliminate",mapGraphics:"resource"});
-  infos[id]={id,expanded:false,name:ch.name,order:order++,parentId:0,scrollX:0,scrollY:0};
+  infos[id]=Object.assign({id,expanded:false,order:order++,parentId:0,scrollX:0,scrollY:0},infos[id]||{},{name:ch.name});
   maps.push({id,chapter:ch,json:map,image:"img/astra/maps/Map"+String(id).padStart(3,"0")+".png"});report.maps++;});
  return {maps,report,ids};
 };
@@ -2623,6 +2640,29 @@ R.movingSprite=function(ctx,classId,team=1){
  if(!gfx||!p||gfx.length!==32*32*15/2)return null;const src=R.decode4bpp(gfx,32,32*15,p);if(!src||!bounds(src))return null;
  const im=rgba(128,128),seq=[0,8,8,4];for(let row=0;row<4;row++)for(let f=0;f<4;f++)blit(im,src,0,(seq[row]+f)*32,32,32,f*32,row*32,row===2);
  return {image:im,source:src,width:32,height:32,anchorY:32};
+};
+// Native RPG Maker MZ sheets B-E. B: tile 0 is reserved for transparency.
+// Slots 1..1023 use the same addressing as Tilemap._drawNormalTile.
+R.nativeTiles=function(ch,im){
+ const w=ch.map.width,h=ch.map.height,n=w*h;
+ T.assert(im&&im.width===w*16&&im.height===h*16&&ch.map.tiles.length===n,"Mapa FE8 inválido para tiles MZ");
+ const slots=new Map(),sheets=[],ids=[],flags=new Array(8192).fill(0);flags[0]=0x10;
+ for(let k=0;k<n;k++){
+  const key=ch.map.tiles[k],terrain=ch.terrain[k]||0;let id=slots.get(key);
+  if(id===undefined){id=slots.size+1;T.assert(id<=1023,"El capítulo supera los 1023 tiles B–E de MZ");slots.set(key,id);
+   const page=id>>8,local=id&255;if(!sheets[page])sheets[page]=rgba(256,256);
+   const x=((local>>7)*8+local%8)*16,y=(Math.floor(local/8)%16)*16;
+   blit(sheets[page],im,k%w*16,Math.floor(k/w)*16,16,16,x,y);
+   const t=R.TERRAIN[terrain];flags[id]=t&&t[1]===0?15:0;
+  }ids.push(id);
+ }
+ return {sheets,ids,flags,unique:slots.size};
+};
+// RPG Maker's single-character sheet: 3 columns x 4 directions, nearest-neighbour scaled by caller.
+R.nativeCharacter=function(sprite,moving){
+ const src=moving||sprite;if(!src)return null;const w=src.width,h=src.height,im=rgba(w*3,h*4);
+ for(let row=0;row<4;row++)for(let f=0;f<3;f++)blit(im,src.image,f*w,(moving?row:0)*h,w,h,f*w,row*h);
+ return im;
 };
 R.itemIcon=function(ctx,id){const b=ctx.rom,t=R.graphicTables(ctx),p=palAt(b,t.iconPal),a=t.icons+id*128;if(t.icons<0||!p||id<0||id>255||!inRange(b,a,128))return null;return R.decode4bpp(b.subarray(a,a+128),16,16,p);};
 R.classAnimationDefs=function(ctx,cls){
@@ -3180,7 +3220,7 @@ async function welcome(){
 }
 async function open(backend){
  $("welcomeError").textContent="Abriendo…";
- const p=await Astra.loadProject(backend);S.project=p;M.db={actors:p.actors,classes:p.classes,weapons:p.weapons,items:p.items};
+ const p=await Astra.loadProject(backend);Object.keys(spriteCache).forEach(k=>delete spriteCache[k]);Astra.clearArtCache();S.preview=null;S.project=p;M.db={actors:p.actors,classes:p.classes,weapons:p.weapons,items:p.items};
  $("welcome").classList.add("hidden");$("welcomeError").textContent="";
  const maps=(p.mapInfos||[]).filter(Boolean).sort((a,b)=>a.order-b.order);
  $("mapSelect").innerHTML=maps.map(m=>`<option value="${m.id}">${esc(String(m.name||"Mapa "+m.id).replace(/^\s*\d+\s*[·.:-]\s*/,""))}</option>`).join("");
@@ -3211,7 +3251,7 @@ Astra.installPlugins=async function(p){
 // ---------- mapa ----------
 async function loadMap(id){
  if(S.dirty&&!await modal(`<h2>Cambios sin guardar</h2><p>Si cambias de mapa perderás los cambios de este.</p>`,[{label:"Cancelar",value:false},{label:"Descartar y cambiar",value:true,cls:"danger"}])){$("mapSelect").value=S.mapId;return;}
- const p=S.project;S.mapId=id;S.map=await Astra.loadMap(p,id);S.undo=[];S.redo=[];S.dirty=false;S.selected=0;
+ const p=S.project;S.mapId=id;S.map=await Astra.loadMap(p,id);S.preview=null;S.undo=[];S.redo=[];S.dirty=false;S.selected=0;
  localStorage.setItem("astra.map."+p.name,id);$("mapSelect").value=id;
  S.tileset=await Astra.loadTileset(p,S.map.tilesetId);
  const packMap=p.pack&&p.pack.maps&&p.pack.maps[id];S.packImage=packMap?await Astra.image(p,packMap.path):null;
@@ -3304,7 +3344,7 @@ function renderInspector(){
 function selectedUnitHtml(e){
  const c=M.find(e,"Ally")||M.find(e,"Enemy")||M.find(e,"Unit"),u=previewUnit(e),eng=S.preview&&S.preview.engine,p=S.project;
  const ally=M.kind(e)==="ally",actorId=c&&Number(c.args.actorId)||0,m=M.markers(S.map).find(x=>x.id===e.id)||{};
- const name=u&&u.name||(actorId&&(p.actors[actorId]||{}).name)||M.describe(e),cls=names(p.classes,u?u.classId:c&&c.args.classId),lv=u?u.level:c&&c.args.level||1;
+ const name=u&&u.name||(actorId&&(p.actors[actorId]||{}).name)||M.describe(e),cls=names(p.classes,u?u.classId:(c&&c.args.classId)||(actorId&&(p.actors[actorId]||{}).classId)||0),lv=u?u.level:c&&c.args.level||1;
  const hp=u?u.hp:0,max=u&&eng?eng.value(u,"health"):0,item=u&&u.inventory[u.equipped],w=item&&eng?eng.itemData(item):null;
  const portrait=ally&&actorId?`<canvas class="selport" width="96" height="96" data-actor="${actorId}"></canvas>`:`<canvas class="selport" id="heroCanvas" width="96" height="96"></canvas>`;
  return `<div class="selcard"><div class="ribbon">UNIDAD SELECCIONADA</div><div class="selbody">${portrait}<div class="selinfo">
@@ -3383,7 +3423,7 @@ function fieldHtml(cmd,f,v){
 // ---------- vista previa con el motor real ----------
 function preview(){
  if(S.preview)return S.preview;S.preview={engine:null};
- try{const m=T.compileMap(T.copy(S.map),S.mapId);m.deployment=m.deployment==="prepare"?"placed":m.deployment;S.preview.engine=new T.Engine(S.project.db,m);}catch(e){}
+ try{const m=T.compileMap(T.copy(S.map),S.mapId);m.deployment=m.deployment==="prepare"?"placed":m.deployment;S.preview.engine=new T.Engine(S.project.db,m);}catch(e){S.preview.error=e.message;console.warn("ASTRA: vista previa táctica",e.message);}
  return S.preview;
 }
 function previewUnit(e){const eng=preview().engine;return eng?eng.unit(e.id):null;}
@@ -3398,7 +3438,7 @@ function ranges(e){
 async function sprite(classId,actorId,team){
  const palette=S.project.pack&&S.project.pack.palette;
  const p=S.project,cls=p.db.classes[classId]||{},art=cls.art||cls.graphic,unit=p.pack&&p.pack.units&&art&&p.pack.units[art];
- if(unit&&unit.map){const im=await Astra.image(p,unit.map.path);if(im)return Object.assign(crop({im,sx:0,sy:0,w:unit.map.width,h:unit.map.height},palette,team),{base:16});}
+ if(unit&&unit.map){const im=await Astra.image(p,unit.map.teamPaths&&unit.map.teamPaths[team]||unit.map.path);if(im)return Object.assign(crop({im,sx:0,sy:0,w:unit.map.width,h:unit.map.height},unit.map.teamPaths?null:palette,team),{base:16});}
  const a=(p.actors||[])[actorId];
  if(a&&a.characterName){const im=await Astra.image(p,"img/characters/"+a.characterName+".png");if(im){const big=a.characterName[0]==="$"||a.characterName.slice(0,2)==="!$";const cw=im.width/(big?3:12),ch=im.height/(big?4:8),i=big?0:a.characterIndex;return Object.assign(crop({im,sx:((i%4)*3+1)*cw,sy:Math.floor(i/4)*4*ch,w:cw,h:ch}),{base:p.tileSize});}}
  return null;
@@ -4657,7 +4697,7 @@ async function nativeFace(p,name,im){
  const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error("No pude codificar cara MZ")),"image/png"));const path="img/faces/"+name+".png";await p.backend.write(path,blob);delete p.images[path];
 }
 async function installGraphics(p,pack,ctx,data,plan,res,source,options,hint){
- const r={portraits:0,nativeFaces:0,standing:0,moving:0,animations:0,clips:0,icons:0,assigned:0,skipped:0,warnings:[]},base="img/astra/fe8/"+source+"/";
+ const r={portraits:0,nativeFaces:0,nativeCharacters:0,nativeTilesets:0,standing:0,moving:0,animations:0,clips:0,icons:0,assigned:0,skipped:0,warnings:[]},base="img/astra/fe8/"+source+"/";
  const tables=R.graphicTables(ctx);r.tables=tables;
  for(const [k,v] of Object.entries(tables))if(v<0)r.warnings.push("Tabla gráfica no localizada: "+k);
  pack.faces=pack.faces||{};pack.units=pack.units||{};pack.atlases=pack.atlases||{};pack.clips=pack.clips||{};pack.itemIcons=pack.itemIcons||{};pack.itemIcons.weapons=pack.itemIcons.weapons||{};pack.itemIcons.items=pack.itemIcons.items||{};
@@ -4684,6 +4724,7 @@ async function installGraphics(p,pack,ctx,data,plan,res,source,options,hint){
    hint("Sprites de mapa · "+c.name);let map=null,walk=null;for(let team=0;team<4;team++){
     const sprite=R.standingSprite(ctx,c.smsId,team);if(sprite){const path=base+"map/"+c.id+"_"+team+".png";await png(p,path,sprite.image);if(!map)map={path,width:sprite.width,height:sprite.height,anchorY:sprite.anchorY,teamPaths:{}};map.teamPaths[team]=path;if(team===1)map.path=path;}
     const moving=R.movingSprite(ctx,c.id,team);if(moving){const path=base+"map/"+c.id+"_walk_"+team+".png";await png(p,path,moving.image);if(!walk)walk={path,width:moving.width,height:moving.height,anchorY:moving.anchorY,teamPaths:{}};walk.teamPaths[team]=path;if(team===1){walk.path=path;await png(p,base+"map/"+c.id+"_moving_source.png",moving.source);walk.sourcePath=base+"map/"+c.id+"_moving_source.png";}}
+    if(options.native&&team>0&&(sprite||moving)){const native=R.nativeCharacter(sprite,moving),nativeName="$FE8_"+source+"_Class_"+c.id+"_"+team;if(native){await png(p,"img/characters/"+nativeName+".png",native,(Number(p.tileSize)||48)/16);art.nativeCharacters=art.nativeCharacters||{};art.nativeCharacters[team]=nativeName;r.nativeCharacters++;}}
    }
    if(map){art.map=map;r.standing++;installed=true;}else warn(c.name,"sprite de espera "+c.smsId+" no legible");if(walk){art.walk=walk;r.moving++;installed=true;}
   }catch(e){warn(c.name,e);}}
@@ -4709,17 +4750,35 @@ async function installGraphics(p,pack,ctx,data,plan,res,source,options,hint){
   if(installed&&!protectedArt){pack.units[name]=art;D.set("classes",row,"art",name);}
   await pause();
  }
+ if(options.native){for(const c of plan.characters){const row=p.actors[res.ids.characters[c.id]],cls=p.classes[res.ids.classes[c.classId]];if(!row||!cls)continue;const art=pack.units[D.fields(cls,"classes").art],name=art&&art.nativeCharacters&&art.nativeCharacters[1];if(name&&(!row.characterName||/^\$FE8_/.test(row.characterName)||options.replace)){D.set("actors",row,"characterName",name);D.set("actors",row,"characterIndex",0);}}}
  if(options.icons){for(const item of plan.items){const ref=res.ids.items[item.id];if(!ref)continue;const group=ref.kind==="weapon"?"weapons":"items",old=pack.itemIcons[group][ref.id];if(old&&!old.fe8Source&&!options.replace)continue;
   try{let entry=iconCache.get(item.iconId);if(!entry){const im=R.itemIcon(ctx,item.iconId);if(!im)continue;const path=base+"icons/"+item.iconId+".png";await png(p,path,im);entry={path,rect:[0,0,16,16],fe8Source:source};iconCache.set(item.iconId,entry);}pack.itemIcons[group][ref.id]=entry;r.icons++;}catch(e){warn(item.name,e);}
  }}
  return r;
+}
+// Generate a real Tilesets.json record and B-E sheets. Preserve unrelated tilesets and maps.
+async function nativeMap(p,source,m,img){
+ const built=R.nativeTiles(m.chapter,img),tag="FE8_"+source+"_"+m.chapter.index,names=new Array(9).fill("");
+ for(let i=0;i<built.sheets.length;i++)if(built.sheets[i]){const name=tag+"_"+"BCDE"[i];await png(p,"img/tilesets/"+name+".png",built.sheets[i],(Number(p.tileSize)||48)/16);names[5+i]=name;}
+ const tilesets=p.tilesets,old=tilesets.find(t=>t&&t.note==="<FE8Tileset:"+tag+">");const id=old?old.id:tilesets.length||1;
+ if(!tilesets.length)tilesets.push(null);
+ tilesets[id]={id,name:"FE8 · "+m.chapter.name,mode:0,note:"<FE8Tileset:"+tag+">",tilesetNames:names,flags:built.flags};
+ m.json.tilesetId=id;m.json.parallaxName="";m.json.parallaxShow=false;
+ const n=m.json.width*m.json.height;for(let k=0;k<n;k++)m.json.data[k]=built.ids[k];
+ return built.unique;
+}
+function nativeUnits(p,pack,map){
+ for(const e of map.events.filter(Boolean)){const c=M.find(e,"Ally")||M.find(e,"Enemy")||M.find(e,"Unit");if(!c)continue;
+  const a=p.actors[c.args.actorId],id=c.args.classId||(a&&a.classId),cls=p.classes[id],art=cls&&pack.units[D.fields(cls,"classes").art],team=c.id==="Ally"?1:c.id==="Enemy"?2:Number(c.args.team)||1;
+  const name=art&&art.nativeCharacters&&art.nativeCharacters[team];if(name)Object.assign(M.page(e).image,{characterName:name,characterIndex:0,direction:2,pattern:1,tileId:0});
+ }
 }
 
 Astra.openRomImport=function(initial){
  const p=P();if(!p)return Astra.ui.toast("Primero abre tu proyecto.");
  const {win,closeWin}=Astra.imgTools;
  const S={clean:null,hack:null,result:null,plan:null,busy:false,sequence:0};
- const w=win(`<header><h2>🎮 Importar Fire Emblem: The Sacred Stones (FE8)</h2><span class="grow"></span><button class="btn small" data-x="close">✕</button></header>
+ const w=win(`<header><h2>🎮 Importar Fire Emblem: The Sacred Stones (FE8 · Native Fix)</h2><span class="grow"></span><button class="btn small" data-x="close">✕</button></header>
   <div class="awbody single"><div class="romimp">
    <p>Importa directamente tu <b>ROM de Fire Emblem: The Sacred Stones (USA)</b>: sus capítulos, mapas, terreno y unidades. <b>Solo necesitas el archivo .gba. Incluye recursos gráficos cuando sean legibles.</b> Si quieres importar un hack, agrega un segundo archivo para comparar sus cambios con la ROM original.</p>
    <div class="romslots">
@@ -4778,12 +4837,21 @@ Astra.openRomImport=function(initial){
   const direct=mode==="direct",all=hdata.chapters,changed=all.filter(c=>c.changed),same=all.length-changed.length;
   const count=k=>Object.values(hdata[k]).filter(r=>r.changed).length;
   const notes=[...new Set(cctx.notes.concat(hctx.notes).concat(hctx.errors))];
+  // Read a real record before any write: the user can see Eirika/character 1, class and portrait.
+  const hero=hdata.characters[1],heroClass=hero&&hdata.classes[hero.classId],tables=R.graphicTables(hctx);
+  let face=null,standing=null;try{if(hero)face=R.portrait(hctx,hero.portraitId||(heroClass&&heroClass.portraitId)||0);if(heroClass)standing=R.standingSprite(hctx,heroClass.smsId,1);}catch(e){notes.push("Prueba gráfica: "+e.message);}
+  S.result.diagnostics={character1:hero?{name:hero.name,id:hero.id,classId:hero.classId,portraitId:hero.portraitId,className:heroClass&&heroClass.name}:null,huffman:!!hctx.huffman,textAt:hctx.textAt,portrait:!!face,standingSprite:!!standing,graphicTables:tables};
   $("riOut").innerHTML=`
    ${notes.length?`<div class="card warn">${notes.map(n=>"⚠ "+esc(n)).join("<br>")}</div>`:""}
    <div class="card">${direct
     ?`<b>ROM original cargada:</b> ${all.length} capítulos detectados. Puedes importar cualquiera de ellos.`
     :`<b>Hack detectado:</b> ${changed.length} capítulos modificados, ${count("characters")} personajes, ${count("classes")} clases y ${count("items")} objetos cambiados.`}
     <span class="help">${direct?"No hace falta añadir un parche ni otra ROM.":same+" capítulos sin cambios también pueden seleccionarse."}</span></div>
+   <div class="card"><h3>Comprobación previa · personaje FE8 #1</h3><div style="display:flex;align-items:center;gap:14px">
+    <canvas id="riFacePreview" width="96" height="80" style="image-rendering:pixelated;background:#0a1226;border:1px solid var(--line);border-radius:6px;flex:none"></canvas>
+    <div><b>${esc(hero?hero.name:"No encontrado")}</b> · ${esc(heroClass?heroClass.name:"Clase no encontrada")}<br>
+    <small>Retrato: ${face?"legible":"no legible"} · Sprite: ${standing?"legible":"no legible"} · Textos: ${hctx.huffman?"Huffman":"sin árbol válido"}</small><br>
+    <small>CRC: ${R.hex(R.crc32(hctx.rom))}. Si no aparece el personaje correcto, no repitas la importación: revisa los detalles técnicos.</small></div></div></div>
    <h3>Capítulos disponibles (${all.length})</h3>
    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
     <button type="button" class="btn small" data-x="selectAll">Seleccionar todos</button>
@@ -4800,13 +4868,15 @@ Astra.openRomImport=function(initial){
     <label class="chk"><input type="checkbox" id="riSprites" checked> Sprites de mapa en reposo y movimiento, por equipo</label>
     <label class="chk"><input type="checkbox" id="riBattle" checked> Animaciones de batalla por clase y arma (experimental)</label>
     <label class="chk"><input type="checkbox" id="riIcons" checked> Iconos de armas y objetos</label>
-    <label class="chk"><input type="checkbox" id="riNative" checked> Crear vista de mapa y caras también en RPG Maker MZ (parallax, no tiles editables)</label>
+    <label class="chk"><input type="checkbox" id="riNative" checked> Crear tilesets editables, sprites de eventos y caras nativas de RPG Maker MZ</label>
     <label class="chk"><input type="checkbox" id="riReplace"> Reemplazar asociaciones gráficas personalizadas existentes</label>
-    <p class="help">Para reparar gráficos de capítulos ya importados: pulsa Ninguno, mantén marcada la opción de traer toda la BD y vuelve a importar. No se crearán mapas adicionales. Revisa los nombres duplicados de importaciones antiguas.</p></div>
+    <label class="chk"><input type="checkbox" id="riRepair"> Reparar/reemplazar el mapa abierto (selecciona exactamente un capítulo; se guarda una copia de seguridad)</label>
+    <p class="help">Para reparar un mapa anterior, abre ese mapa, selecciona un único capítulo y marca Reparar/reemplazar el mapa abierto. Esto sustituye sus eventos. Para reparar solo la BD: selecciona Ninguno y deja activada toda la BD. Haz una copia del proyecto antes.</p></div>
    <div class="card" id="riPlan"></div>
    <details class="help"><summary>Detalles técnicos</summary>
     Tablas: personajes ${R.hex(hctx.charactersAt+0x08000000)}, clases ${R.hex(hctx.classesAt+0x08000000)}, objetos ${R.hex(hctx.itemsAt+0x08000000)}, capítulos ${R.hex(hctx.chaptersAt+0x08000000)}, textos ${R.hex(hctx.textAt+0x08000000)}.
     Textos: ${hctx.huffman?"Huffman":"sin comprimir"}. Campos del capítulo: ${esc(JSON.stringify(hctx.layout||{}))}.</details>`;
+  if(face){const c=$("riFacePreview");c.width=face.width;c.height=face.height;c.getContext("2d").putImageData(new ImageData(face.data,face.width,face.height),0,0);}
   plan();
  }
  const chosen=()=>[...w.querySelectorAll("[data-ch]")].filter(i=>i.checked).map(i=>Number(i.dataset.ch));
@@ -4826,37 +4896,41 @@ Astra.openRomImport=function(initial){
   try{
    T.assert(!p.pluginStatus||p.pluginStatus.ok,"Pulsa Actualizar motor gráfico MZ antes de importar.");
    if($("riSprites").checked||$("riBattle").checked){const runtime=await p.backend.text("js/plugins/TacticsUI.js").catch(()=>"");T.assert(runtime.includes("entry.teamPaths")&&runtime.includes("weaponKey"),"Pulsa Actualizar motor gráfico MZ para instalar el lector de los nuevos recursos. Cierra MZ antes de hacerlo.");}
+   const repair=$("riRepair").checked;let replaceMapId=0;
+   if(repair){T.assert(S.plan.chapters.length===1&&Astra.state.mapId,"Selecciona un único capítulo y abre el mapa a reparar.");T.assert(window.confirm("Se sustituirán el mapa y sus eventos actuales por el capítulo FE8 seleccionado. Se guardará una copia .astra-bak. ¿Continuar?"),"Cancelado.");replaceMapId=Astra.state.mapId;}
    const pack=Astra.db.ensurePack();
    hint("Creando datos y mapas…");await pause();
    const cur=Astra.state.map||{},ctx=S.result.hctx,source=R.crc32(ctx.rom).toString(16).padStart(8,"0");
-   const draw=$("riDraw").checked,native=$("riNative").checked,terrain=R.terrainMapping(Object.assign({},p.terrain,pack.terrain||{}),S.plan.chapters);
+   const draw=$("riDraw").checked,native=$("riNative").checked;T.assert(!S.plan.chapters.length||draw,"Activa Dibujar cada mapa: no se crearán mapas con tiles de relleno.");const terrain=R.terrainMapping(Object.assign({},p.terrain,pack.terrain||{}),S.plan.chapters);
    // Snapshot options before any asynchronous work. Do not save JSON until all PNGs have been attempted.
    const options={faces:$("riFaces").checked,sprites:$("riSprites").checked,battle:$("riBattle").checked,icons:$("riIcons").checked,native,replace:$("riReplace").checked};
-   const res=R.apply(p,S.plan,{source,terrainIds:terrain.ids,nativePreview:draw&&native,template:{tilesetId:cur.tilesetId,data:cur.data}});
+   const res=R.apply(p,S.plan,{source,terrainIds:terrain.ids,nativePreview:draw&&native,replaceMapId,repairActors:true,template:{tilesetId:cur.tilesetId,data:cur.data}});
    pack.maps=pack.maps||{};pack.terrain=terrain.terrain;
    const gr=await installGraphics(p,pack,ctx,S.result.hdata,S.plan,res,source,options,hint),written=[];
    for(const m of res.maps){
     hint("Guardando "+m.json.displayName+"…");await pause();
     if(draw){const img=R.renderMap(ctx,m.chapter);
      if(img){await png(p,m.image,img);pack.maps[m.id]={path:m.image,cell:16,width:m.json.width,height:m.json.height};written.push(m.image);
-      if(native){const cell=Number(p.tileSize)||48,parallax="!FE8_"+source+"_Map_"+m.id;if(cell%16===0&&img.width*cell/16<=8192&&img.height*cell/16<=8192){await png(p,"img/parallaxes/"+parallax+".png",img,cell/16);m.json.parallaxName=parallax;}else gr.warnings.push(m.json.displayName+": vista MZ omitida por tamaño de tile o textura.");}}
-     else {gr.warnings.push(m.json.displayName+": no se pudo dibujar el mapa; revisa sus tileset y paleta.");M.setCommand(M.missionEvent(m.json,true),"Mission",{mapGraphics:"native"});}}
+      if(native){const count=await nativeMap(p,source,m,img);gr.nativeTilesets++;m.nativeTiles=count;}}
+     else {throw new Error(m.json.displayName+": no se pudo dibujar el mapa; no se guardará un mapa vacío. Revisa sus tileset y paleta.");}}
     else M.setCommand(M.missionEvent(m.json,true),"Mission",{mapGraphics:"native"});
+    if(native)nativeUnits(p,pack,m.json);
     await Astra.saveFile(p,Astra.mapPath(m.id),JSON.stringify(m.json));written.push(Astra.mapPath(m.id));
    }
+   if(gr.nativeTilesets)await Astra.saveFile(p,"data/Tilesets.json",D.stringifyTable(p.tilesets));
    await Astra.saveFile(p,"data/MapInfos.json",D.stringifyTable(p.mapInfos));
    for(const t of ["actors","classes","weapons","items"]){await Astra.saveFile(p,"data/"+D.TABLES[t].file+".json",D.stringifyTable(p[t]));if(Astra.dbState)Astra.dbState.dirty.delete(t);}
    await Astra.saveFile(p,"data/"+p.packName+".json",JSON.stringify(pack));
    await Astra.saveFile(p,"js/plugins.js",Astra.writePlugins(p.plugins));
    if(Astra.dbState){Astra.dbState.dirty.delete("pack");Astra.dbState.dirty.delete("plugins");}
    const r=res.report;
-   const summary={source,counts:r,graphics:gr,limitations:["No se traducen scripts narrativos, refuerzos, inventario de tiendas ni efectos de hechizo.","La orientación, el impacto y las secuencias especiales de batalla requieren verificar con la ROM real.","Los PNG de mapas no son tiles editables de MZ."]};
+   const summary={source,counts:r,diagnostics:S.result.diagnostics,maps:res.maps.map(m=>({id:m.id,fe8Index:m.chapter.index,name:m.json.displayName,nativeTiles:m.nativeTiles||0,tilesetId:m.json.tilesetId,units:m.chapter.units.length})),graphics:gr,limitations:["No se traducen scripts narrativos, refuerzos, inventario de tiendas ni efectos de hechizo.","La orientación, el impacto y las secuencias especiales de batalla requieren verificar con la ROM real.","Los tiles de MZ son metatiles estáticos, sin autotiles ni animación de terreno GBA. La lógica de eventos sigue siendo aproximada."]};
    await Astra.saveFile(p,"data/FE8_Import_"+source+".json",JSON.stringify(summary,null,2));
    if(Astra.clearArtCache)Astra.clearArtCache();
    if(res.maps[0])localStorage.setItem("astra.map."+p.name,String(res.maps[0].id));
    closeWin();await Astra.open(p.backend);
    Astra.ui.modal(`<h2>🎮 Fire Emblem importado</h2><p>${r.maps} mapa${r.maps===1?"":"s"}, ${r.units} unidades, ${r.actors} personajes, ${r.classes} clases, ${r.weapons} armas y ${r.items} objetos nuevos${r.reused?` (y ${r.reused} que ya tenías, reutilizados)`:""}.</p>
-    <p><b>Gráficos:</b> ${gr.portraits} retratos, ${gr.standing} sprites de reposo, ${gr.moving} sprites de movimiento, ${gr.animations} animaciones (${gr.clips} pistas), ${gr.assigned} asignaciones y ${gr.icons} iconos.</p>
+    <p><b>Gráficos:</b> ${gr.portraits} retratos, ${gr.standing} sprites de reposo, ${gr.moving} sprites de movimiento, ${gr.animations} animaciones (${gr.clips} pistas), ${gr.assigned} asignaciones, ${gr.icons} iconos, ${gr.nativeTilesets} tilesets MZ y ${gr.nativeCharacters} hojas de personajes nativas.</p>
     ${gr.warnings.length?`<p class="help">⚠ ${gr.warnings.length} avisos. Informe completo: data/FE8_Import_${source}.json.</p><details><summary>Primeros avisos</summary><p class="help">${gr.warnings.slice(0,12).map(esc).join("<br>")}</p></details>`:""}
     <p class="help">Abre MZ de nuevo y prueba desde el menú táctico de TacticsMZ. Los diálogos, refuerzos, efectos especiales y recompensas de eventos requieren conversión adicional; no se han importado.</p>`,[{label:"Vale",value:0,cls:"gold"}]);
   }catch(e){hint("✖ "+e.message,true);$("riGo").disabled=false;}
