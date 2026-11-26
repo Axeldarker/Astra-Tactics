@@ -4777,8 +4777,8 @@ function nativeUnits(p,pack,map){
 Astra.openRomImport=function(initial){
  const p=P();if(!p)return Astra.ui.toast("Primero abre tu proyecto.");
  const {win,closeWin}=Astra.imgTools;
- const S={clean:null,hack:null,result:null,plan:null,busy:false,sequence:0};
- const w=win(`<header><h2>🎮 Importar Fire Emblem: The Sacred Stones (FE8 · Native Fix)</h2><span class="grow"></span><button class="btn small" data-x="close">✕</button></header>
+ const S={clean:null,hack:null,result:null,plan:null,busy:false,sequence:0,diagnostic:null,lastError:null,stage:"Esperando ROM"};
+ const w=win(`<header><h2>🎮 Importar Fire Emblem: The Sacred Stones (FE8 · Native Fix + Diagnóstico)</h2><span class="grow"></span><button class="btn small" data-x="close">✕</button></header>
   <div class="awbody single"><div class="romimp">
    <p>Importa directamente tu <b>ROM de Fire Emblem: The Sacred Stones (USA)</b>: sus capítulos, mapas, terreno y unidades. <b>Solo necesitas el archivo .gba. Incluye recursos gráficos cuando sean legibles.</b> Si quieres importar un hack, agrega un segundo archivo para comparar sus cambios con la ROM original.</p>
    <div class="romslots">
@@ -4786,10 +4786,18 @@ Astra.openRomImport=function(initial){
     <label class="romslot" id="rsHack"><span class="ki">🩹</span><b>2 · Hack o parche · Opcional</b><small>Su parche .ups o .bps, o la ROM ya parcheada (.gba).</small><em></em><input type="file" accept=".ups,.bps,.gba" hidden data-slot="hack"></label>
    </div>
    <p class="help">También puedes arrastrar la ROM, o ambos archivos si vas a importar un hack. Todo se procesa en tu navegador: los archivos no salen de tu equipo y Astra no copia la ROM a tu proyecto. La extracción gráfica se ejecuta localmente y guarda PNG y pistas compatibles. Las animaciones especiales y los hacks con formatos no estándar pueden requerir ajustes. Usa recursos que tengas derecho a utilizar.</p>
+   <div class="card"><button type="button" class="btn small" data-x="diagnostic">📋 Descargar diagnóstico JSON</button><p class="help" style="margin-top:8px">Disponible antes de importar y después de un error. No modifica el proyecto ni incluye la ROM.</p></div>
    <div id="riOut"></div>
   </div></div>
   <footer><button class="btn small" data-x="runtime" id="riRuntime">Actualizar motor gráfico MZ</button><span class="help" id="riHint"></span><span class="grow"></span><button class="btn" data-x="close">Cerrar</button><button class="btn gold" data-x="go" id="riGo" disabled>📥 Importar</button></footer>`);
- const hint=(t,bad)=>{const h=$("riHint");if(h){h.textContent=t;h.classList.toggle("error",!!bad);}};
+ const hint=(t,bad)=>{if(t)S.stage=t;if(bad)S.lastError=t;const h=$("riHint");if(h){h.textContent=t;h.classList.toggle("error",!!bad);}};
+ const describeContext=ctx=>({gameCode:R.gameCode(ctx.rom),crc:R.crc32(ctx.rom).toString(16).padStart(8,"0"),size:ctx.rom.length,notes:ctx.notes||[],errors:ctx.errors||[],tables:Object.fromEntries(["characters","classes","items","chapters","assets","text"].map(k=>[k,ctx[k+"At"]??null])),huffman:ctx.huffman||null,layout:ctx.layout||null});
+ function downloadDiagnostic(){
+  const result=S.result,d=result&&result.hdata,ctx=result&&result.hctx;
+  const report={version:"FE8 Native Fix + Diagnóstico",stage:S.stage,error:S.lastError,busy:S.busy,mode:result&&result.mode,rom:S.diagnostic,preflight:result&&result.diagnostics||null,counts:d?{characters:Object.keys(d.characters).length,classes:Object.keys(d.classes).length,items:Object.keys(d.items).length,chapters:d.chapters.length}:null,chapters:d?d.chapters.map(c=>({index:c.index,name:c.name,width:c.map.width,height:c.map.height,units:c.units.length})):[],selected:result?chosen():[],pluginStatus:p.pluginStatus||null,resourcePack:p.packName||null,tileSize:p.tileSize||null,importResult:S.importSummary||null};
+  if(ctx)report.rom=describeContext(ctx);
+  const blob=new Blob([JSON.stringify(report,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="FE8_Diagnostico_"+(report.rom&&report.rom.crc||"sin_rom")+".json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }
  const show=()=>{[["clean","rsClean"],["hack","rsHack"]].forEach(([k,id])=>{const el=$(id);if(!el)return;el.classList.toggle("ok",!!S[k]);el.querySelector("em").textContent=S[k]?"✔ "+S[k].name:"";});};
  async function take(files){
   for(const f of files){
@@ -4805,10 +4813,10 @@ Astra.openRomImport=function(initial){
  async function bytes(f){return new Uint8Array(await f.arrayBuffer());}
  async function analyze(){
   if(S.busy||!S.clean)return;
-  const seq=++S.sequence;S.busy=true;$("riGo").disabled=true;$("riOut").innerHTML="";S.result=null;S.plan=null;
+  const seq=++S.sequence;S.busy=true;$("riGo").disabled=true;$("riOut").innerHTML="";S.result=null;S.plan=null;S.diagnostic=null;S.lastError=null;S.importSummary=null;
   try{
    hint("Leyendo la ROM FE8 (USA)…");await pause();
-   const clean=await bytes(S.clean),cctx=R.open(clean);
+   const clean=await bytes(S.clean);S.diagnostic={gameCode:R.gameCode(clean),crc:R.crc32(clean).toString(16).padStart(8,"0"),size:clean.length};const cctx=R.open(clean);S.diagnostic=describeContext(cctx);
    if(cctx.errors.length)throw new Error(cctx.errors.join(" "));
    // Una sola ROM: todos sus capítulos son seleccionables, sin exigir un hack.
    // Dos archivos: se conserva la comparación original de FE8 y sus parches UPS/BPS.
@@ -4817,7 +4825,7 @@ Astra.openRomImport=function(initial){
     hint("Aplicando el hack y comparando…");await pause();
     const hack=R.applyPatch(clean,await bytes(S.hack));
     T.assert(S.hack!==S.clean,"Selecciona dos archivos diferentes o deja el hack vacío.");
-    hctx=R.open(hack,cctx);
+    S.diagnostic={gameCode:R.gameCode(hack),crc:R.crc32(hack).toString(16).padStart(8,"0"),size:hack.length};hctx=R.open(hack,cctx);S.diagnostic=describeContext(hctx);
     if(hctx.errors.length)throw new Error(hctx.errors.join(" "));
     const cdata=R.read(cctx);await pause();
     hdata=R.diff(cdata,R.read(hctx));mode="hack";
@@ -4825,10 +4833,10 @@ Astra.openRomImport=function(initial){
     hint("Leyendo capítulos y datos de FE8…");await pause();
     hdata=R.read(cctx);
    }
-   if(hctx.errors.length)throw new Error(hctx.errors.join(" "));
+   S.diagnostic=describeContext(hctx);if(hctx.errors.length)throw new Error(hctx.errors.join(" "));
    if(!hdata.chapters.length)throw new Error("No se encontraron capítulos legibles. Comprueba que la ROM sea FE8 USA (BE8E) y que no esté dañada.");
    if(seq!==S.sequence)return;
-   S.result={cctx,hctx,hdata,mode};render();hint("");
+   S.result={cctx,hctx,hdata,mode};render();hint("Análisis terminado; puedes descargar el diagnóstico.");
   }catch(e){if(seq===S.sequence)hint("✖ "+e.message,true);}
   finally{S.busy=false;}
  }
@@ -4892,7 +4900,7 @@ Astra.openRomImport=function(initial){
  async function go(){
   if(S.busy||!S.plan)return;
   if(Astra.state.dirty||(Astra.dbState&&Astra.dbState.dirty.size)){Astra.ui.toast("Primero guarda los cambios del mapa y de la base de datos.");return;}
-  S.busy=true;$("riGo").disabled=true;
+  S.busy=true;S.lastError=null;S.importSummary=null;$("riGo").disabled=true;
   try{
    T.assert(!p.pluginStatus||p.pluginStatus.ok,"Pulsa Actualizar motor gráfico MZ antes de importar.");
    if($("riSprites").checked||$("riBattle").checked){const runtime=await p.backend.text("js/plugins/TacticsUI.js").catch(()=>"");T.assert(runtime.includes("entry.teamPaths")&&runtime.includes("weaponKey"),"Pulsa Actualizar motor gráfico MZ para instalar el lector de los nuevos recursos. Cierra MZ antes de hacerlo.");}
@@ -4925,7 +4933,7 @@ Astra.openRomImport=function(initial){
    if(Astra.dbState){Astra.dbState.dirty.delete("pack");Astra.dbState.dirty.delete("plugins");}
    const r=res.report;
    const summary={source,counts:r,diagnostics:S.result.diagnostics,maps:res.maps.map(m=>({id:m.id,fe8Index:m.chapter.index,name:m.json.displayName,nativeTiles:m.nativeTiles||0,tilesetId:m.json.tilesetId,units:m.chapter.units.length})),graphics:gr,limitations:["No se traducen scripts narrativos, refuerzos, inventario de tiendas ni efectos de hechizo.","La orientación, el impacto y las secuencias especiales de batalla requieren verificar con la ROM real.","Los tiles de MZ son metatiles estáticos, sin autotiles ni animación de terreno GBA. La lógica de eventos sigue siendo aproximada."]};
-   await Astra.saveFile(p,"data/FE8_Import_"+source+".json",JSON.stringify(summary,null,2));
+   S.importSummary=summary;await Astra.saveFile(p,"data/FE8_Import_"+source+".json",JSON.stringify(summary,null,2));
    if(Astra.clearArtCache)Astra.clearArtCache();
    if(res.maps[0])localStorage.setItem("astra.map."+p.name,String(res.maps[0].id));
    closeWin();await Astra.open(p.backend);
@@ -4944,7 +4952,7 @@ Astra.openRomImport=function(initial){
  const body=w.querySelector(".awin");
  body.ondragover=e=>{e.preventDefault();};
  body.ondrop=async e=>{e.preventDefault();if(S.busy)return;take(await Astra.droppedFiles(e.dataTransfer));};
- w.onclick=e=>{const b=e.target.closest("[data-x]");if(!b)return;if(b.dataset.x==="close"){if(!S.busy)closeWin();return;}if(b.dataset.x==="go")return go();if(b.dataset.x==="runtime")return updateRuntime();
+ w.onclick=e=>{const b=e.target.closest("[data-x]");if(!b)return;if(b.dataset.x==="diagnostic")return downloadDiagnostic();if(b.dataset.x==="close"){if(!S.busy)closeWin();return;}if(b.dataset.x==="go")return go();if(b.dataset.x==="runtime")return updateRuntime();
   if(!S.busy&&["selectAll","selectNone","selectChanged"].includes(b.dataset.x)){
    w.querySelectorAll("[data-ch]").forEach(i=>{const c=S.result&&S.result.hdata.chapters.find(c=>c.index===Number(i.dataset.ch));i.checked=b.dataset.x==="selectAll"||(b.dataset.x==="selectChanged"&&!!(c&&c.changed));});
    plan();return;
