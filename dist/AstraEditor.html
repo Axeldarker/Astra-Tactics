@@ -2507,6 +2507,21 @@ R.TERRAIN={1:["Llanura",1],2:["Camino",1],3:["Aldea",1,{avoid:10}],4:["Aldea cer
 R.terrainRows=function(existing){const out={};Object.keys(R.TERRAIN).forEach(id=>{if(existing&&existing[id])return;const [name,cost,extra]=R.TERRAIN[id];out[id]=Object.assign({name,cost,color:"#667f60"},extra||{});});return out;};
 const MARKERS={32:"chest",33:"chest",30:"door",3:"village",6:"shop",7:"shop",31:"goal"};
 const stat=(o,k)=>Math.max(0,o[k]||0);
+// Add a native MZ entry point. A Mission definition alone does not launch Scene_Tactics.
+R.ensureMissionStart=function(map){
+ const events=map.events||(map.events=[null]);
+ const start=events.filter(Boolean).find(e=>(e.pages||[]).some(p=>(p.list||[]).some(c=>c.code===357&&c.parameters&&c.parameters[0]==="TacticsMZ"&&c.parameters[1]==="Start")));
+ if(start)return {event:start,created:false}; // respect a deliberately configured existing entry point
+ const id=M.nextId(map),page=M.blankPage(),e={id,name:"ASTRA · Iniciar batalla",note:"<AstraAutoStart>",x:0,y:0,pages:[page]};
+ page.trigger=3;page.through=true;page.priorityType=0;events[id]=e;
+ M.setCommand(e,"Start",{mapId:0});
+ e.name="ASTRA · Iniciar batalla";
+ // If the tactical scene returns to this native map, end the autorun rather than looping forever.
+ page.list.splice(page.list.length-1,0,{code:123,indent:0,parameters:["A",0]});
+ const done=M.blankPage();done.conditions.selfSwitchValid=true;done.conditions.selfSwitchCh="A";done.through=true;done.priorityType=0;e.pages.push(done);
+ return {event:e,created:true};
+};
+R.hasPlayerUnits=map=>(map.events||[]).filter(Boolean).some(e=>!!M.find(e,"Ally")||Number(M.find(e,"Unit")?.args.team)===1);
 // Escribe el plan en el proyecto (listas de MZ en memoria). Devuelve los mapas nuevos para guardarlos.
 R.apply=function(p,plan,opts){
  opts=opts||{};const ids={characters:{},classes:{},items:{}},report={classes:0,actors:0,weapons:0,items:0,maps:0,units:0,reused:0};
@@ -2567,6 +2582,7 @@ R.apply=function(p,plan,opts){
     M.setCommand(e,"Unit",{actorId:actor||0,classId:cls,name:named?named.name:"",team:u.team===2?"2":u.team===0?"1":"3",level:u.level,weaponId:weapon?weapon.id:0,itemId:item?item.id:0,ai:boss||u.ai[1]===3?"hold":"approach",boss});}
    report.units++;});
   M.setCommand(M.missionEvent(map,true),"Mission",{title:ch.name,objective:throne?"seize":"eliminate",mapGraphics:"resource"});
+  if(R.hasPlayerUnits(map))R.ensureMissionStart(map);
   infos[id]=Object.assign({id,expanded:false,order:order++,parentId:0,scrollX:0,scrollY:0},infos[id]||{},{name:ch.name});
   maps.push({id,chapter:ch,json:map,image:"img/astra/maps/Map"+String(id).padStart(3,"0")+".png"});report.maps++;});
  return {maps,report,ids};
@@ -2605,8 +2621,12 @@ function portraitBytes(b,o){
  if(!inRange(b,o,4))return null;
  if(b[o]===0x10){const d=lzAt(b,o,0x2800);return d&&d.length>=0x1000&&d.length<=0x2800&&d.length%128===0?d:null;}
  if(b[o]!==0)return null;
- const size=u32(b,o)>>>8;
- return size>=0x1000&&size<=0x2800&&size%128===0&&inRange(b,o+4,size)?b.subarray(o+4,o+4+size):null;
+ // FE8's type-0/fake-compressed blocks store the total byte count INCLUDING the 4-byte header.
+ const total=u32(b,o)>>>8;
+ for(const size of [total-4,total]){
+  if(size>=0x1000&&size<=0x2800&&size%128===0&&inRange(b,o+4,size))return b.subarray(o+4,o+4+size);
+ }
+ return null;
 }
 function tableCandidates(rom,refs,score){const candidates=[...new Set(refs.map(x=>ptrAt(rom,x)).filter(x=>x>=0))];const ranked=candidates.map(at=>({at,score:score(at)})).sort((a,b)=>b.score-a.score);return ranked.length&&ranked[0].score>0?ranked[0].at:-1;}
 R.graphicTables=function(ctx){
@@ -2766,6 +2786,7 @@ class FolderBackend{
  async blob(path){return (await this.handle(path)).getFile();}
  async text(path){return (await this.blob(path)).text();}
  async write(path,text){const w=await (await this.handle(path,true)).createWritable();await w.write(text);await w.close();}
+ async removeMap(path){if(!/^data\/Map[0-9]+\.json$/.test(path))throw new Error("Ruta de mapa no válida");const data=await this.dir.getDirectoryHandle("data");await data.removeEntry(path.slice(5));}
  async permission(){const o={mode:"readwrite"};if(await this.dir.queryPermission(o)==="granted")return true;return (await this.dir.requestPermission(o))==="granted";}
 }
 class HttpBackend{
@@ -2845,6 +2866,42 @@ Astra.image=async function(p,path){
  if(!path)return null;if(p.images[path]!==undefined)return p.images[path];
  p.images[path]=(async()=>{try{return await createImageBitmap(await p.backend.blob(path));}catch(e){return null;}})();
  return p.images[path];
+};
+
+// ASTRA map maintenance. Only remove map JSONs; preserve shared tilesets, art and database rows.
+Astra.inspectProjectMaps=async function(p){
+ const rows=[];
+ for(const info of (p.mapInfos||[]).filter(Boolean)){
+  const id=Number(info.id);Tactics.assert(Number.isInteger(id)&&id>0,"ID de mapa inválido");
+  const path=Astra.mapPath(id),raw=await p.backend.text(path),map=JSON.parse(raw);
+  rows.push({id,name:info.name,path,raw,map,imported:/<FE8Import:[^>]+>/.test(map.note||"")});
+ }
+ return rows;
+};
+Astra.purgeProjectMaps=async function(p,rows,ids,keepId){
+ const remove=new Set(ids.map(Number)),live=rows.filter(m=>!remove.has(m.id)),gone=rows.filter(m=>remove.has(m.id));
+ Tactics.assert(gone.length&&live.length&&gone.length===remove.size,"Conserva al menos un mapa y elige IDs válidos");
+ const keep=live.find(m=>m.id===Number(keepId))||live[0];
+ Tactics.assert(typeof p.backend.removeMap==="function","La limpieza solo está disponible en proyectos locales con permiso de escritura");
+ const folder="astra_backups/mapas_"+new Date().toISOString().replace(/[:.]/g,"-")+"_"+Math.random().toString(36).slice(2,8);
+ // Always preserve a complete recoverable snapshot before changing the project index.
+ const paths=["data/MapInfos.json","data/System.json",...(p.packName&&p.pack?["data/"+p.packName+".json"]:[])];
+ for(const path of paths)await p.backend.write(folder+"/"+path,await p.backend.text(path));
+ for(const m of gone)await p.backend.write(folder+"/"+m.path,m.raw);
+ const infos=Tactics.copy(p.mapInfos),system=Tactics.copy(p.system),pack=p.pack?Tactics.copy(p.pack):null;
+ for(const m of gone){infos[m.id]=null;if(pack&&pack.maps)delete pack.maps[m.id];}
+ for(const m of infos.filter(Boolean))if(remove.has(Number(m.parentId)))m.parentId=0;
+ if(remove.has(Number(system.startMapId))||!live.some(m=>m.id===Number(system.startMapId))){system.startMapId=keep.id;system.startX=0;system.startY=0;}
+ // Index is written last. If a metadata write fails, roll back from the snapshot.
+ try{
+  await Astra.saveFile(p,"data/System.json",JSON.stringify(system));
+  if(pack&&p.packName)await Astra.saveFile(p,"data/"+p.packName+".json",JSON.stringify(pack));
+  await Astra.saveFile(p,"data/MapInfos.json",JSON.stringify(infos));
+ }catch(e){for(const path of paths){try{await p.backend.write(path,await p.backend.text(folder+"/"+path));}catch(ignored){}}throw new Error(e.message+". Respaldo: "+folder);}
+ const failures=[];
+ // Only remove files once they are no longer referenced by MapInfos. Do not remove shared graphics.
+ for(const m of gone){try{await p.backend.removeMap(m.path);}catch(e){failures.push(m.path+": "+e.message);}}
+ return {deleted:gone.length,remaining:live.length,keepId:keep.id,folder,failures};
 };
 
 // Astra Editor · dibujo del mapa tal como lo ve el editor de MZ (capas 0-3, sombras y autotiles).
@@ -3305,18 +3362,51 @@ async function save(){
  catch(e){modal(`<h2>No se pudo guardar</h2><p class="error">${esc(e.message)}</p>`,[{label:"Vale",value:0}]);}
 }
 
-// ▶ Probar misión: el navegador no puede abrir MZ, así que guarda, revisa y explica el último paso.
+// Map administration: offer a safe FE8-only scope or all maps except the explicitly selected survivor.
+async function manageMaps(){
+ const p=S.project;if(!p)return;
+ if(S.dirty||(Astra.dbState&&Astra.dbState.dirty.size))return toast("Guarda los cambios antes de limpiar mapas.");
+ if(typeof p.backend.removeMap!=="function")return toast("Abre un proyecto local para administrar sus mapas.");
+ try{
+  const rows=await Astra.inspectProjectMaps(p),imported=rows.filter(m=>m.imported),base=rows.find(m=>!m.imported)||rows[0];
+  if(rows.length<=1)return toast("Hay un solo mapa. ASTRA conserva siempre al menos uno.");
+  // Two scopes, with a selectable map to preserve in the complete cleanup.
+  const mode=await modal(`<h2>🗺 Administrar mapas</h2><p>${rows.length} mapas · ${imported.length} con etiqueta de importación FE8.</p><p>La limpieza de FE8 conserva los mapas propios. Las importaciones de versiones antiguas sin etiqueta pueden requerir la limpieza completa.</p><p class="help">Se realizará un respaldo antes de borrar. No se eliminan personajes, clases, tilesets, animaciones ni imágenes compartidas.</p>`,[{label:"Cancelar",value:""},{label:"Limpiar FE8",value:"fe8"},{label:"Limpiar todos salvo uno",value:"all",cls:"danger"}]);
+  if(!mode)return;
+  let keep=base.id;
+  if(mode==="all"||imported.length===rows.length){
+   const choose=modal(`<h2>Mapa que se conservará</h2><p>Selecciona el mapa que no quieres borrar.</p><label class="field wide"><select id="purgeKeep">${rows.map(m=>`<option value="${m.id}"${m.id===keep?" selected":""}>${m.id} · ${esc(m.name)}</option>`).join("")}</select></label>`,[{label:"Cancelar",value:false},{label:"Continuar",value:true,cls:"gold"}]);
+   const select=$("purgeKeep");if(!await choose)return;keep=Number(select.value);
+  }
+  const gone=(mode==="fe8"?imported:rows).filter(m=>m.id!==keep);
+  if(!gone.length)return toast("No hay mapas importados que eliminar.");
+  const confirmed=await modal(`<h2>Confirmar eliminación</h2><p>Se eliminarán <b>${gone.length} mapas</b> de <b>${esc(p.name)}</b>. Se conservarán ${rows.length-gone.length}, incluido el mapa ${keep}.</p><p class="error">Cierra RPG Maker MZ antes de aceptar. Los eventos de mapas conservados que enlacen a mapas borrados deberán revisarse.</p><p class="help">Se guardará un respaldo independiente en astra_backups/ antes de modificar los archivos.</p>`,[{label:"Cancelar",value:false},{label:"Eliminar "+gone.length+" mapas",value:true,cls:"danger"}]);
+  if(!confirmed)return;
+  toast("Creando respaldo y limpiando mapas…");const r=await Astra.purgeProjectMaps(p,rows,gone.map(m=>m.id),keep);
+  localStorage.setItem("astra.map."+p.name,String(r.keepId));await open(p.backend);
+  await modal(`<h2>Mapas depurados</h2><p>${r.deleted} mapas retirados del proyecto; ${r.remaining} conservados.</p><p class="help">Respaldo: <code>${esc(r.folder)}</code></p>${r.failures.length?`<p class="error">${r.failures.length} archivos quedaron sin borrar del disco, aunque ya no figuran en la lista.</p>`:""}<p class="help">Abre nuevamente MZ sin guardar su copia anterior del proyecto.</p>`,[{label:"Vale",value:0,cls:"gold"}]);
+ }catch(e){await modal(`<h2>No se pudo depurar</h2><p class="error">${esc(e.message)}</p>`,[{label:"Vale",value:0}]);}
+}
+// ▶ Probar misión: prepare the MZ start map and the native tactical entry point on request.
 async function playtest(){
  if(!S.map)return;if(S.dirty){await save();if(S.dirty)return;}
- const c=S.check||M.check(S.map,S.mapId),name=(($("mapSelect").selectedOptions||[])[0]||{}).text||"";
- modal(`<h2>▶ Probar misión</h2>${c.ok?`<p>✔ <b>${esc(name)}</b> está guardado y la misión está lista${c.warnings.length?` (con ${c.warnings.length} aviso${c.warnings.length===1?"":"s"})`:""}.</p>`:`<p class="error">✖ Antes de probar, arregla esto: ${esc(c.error)}</p>`}
-  ${c.warnings.map(w=>`<p class="help">⚠ ${esc(w)}</p>`).join("")}
-  <ol class="steps2"><li>Abre el proyecto en <b>RPG Maker MZ</b>. Si ya estaba abierto, vuelve a abrirlo <b>sin guardar</b> (Archivo → Abrir proyecto), o MZ pisará lo que guardó Astra.</li>
-  <li>Pulsa <b>▶ Reproducir prueba</b> (Ctrl+R) y entra en este mapa: la misión empieza sola.</li></ol>
-  <p class="help">Astra funciona en el navegador y no puede abrir MZ por ti; por eso deja todo guardado y revisado.</p>`,[{label:"Entendido",value:0,cls:"gold"}]);
+ const c=M.check(S.map,S.mapId),name=(($('mapSelect').selectedOptions||[])[0]||{}).text||"",p=S.project;
+ const hasAllies=!!(c.ok&&c.summary.allies>0);
+ const prepare=await modal(`<h2>▶ Probar misión</h2>${c.ok?`<p>✔ <b>${esc(name)}</b> compila correctamente.</p>`:`<p class="error">✖ ${esc(c.error)}</p>`}
+ ${c.warnings.map(w=>`<p class="help">⚠ ${esc(w)}</p>`).join("")}
+ <p>En MZ puedes iniciar una misión desde <b>Misiones del editor</b>, en el menú táctico del título.</p><p>También puedes preparar una prueba directa: ASTRA agrega el evento <b>Iniciar batalla</b> si falta y cambia el mapa de inicio de una Nueva partida a este mapa.</p><p class="help">Cierra MZ antes de preparar; se respaldan el mapa y System.json. El cambio de inicio es persistente hasta que lo cambies de nuevo.</p>`,[{label:"Cerrar",value:false},...(hasAllies?[{label:"Preparar prueba directa",value:true,cls:"gold"}]:[])]);
+ if(!prepare)return;
+ try{
+  T.assert(p.pluginStatus.ok,"Actualiza primero los plugins de TacticsMZ");
+  const map=T.copy(S.map),system=T.copy(p.system);M.Rom.ensureMissionStart(map);
+  const ally=(map.events||[]).filter(Boolean).find(e=>M.find(e,"Ally")||Number(M.find(e,"Unit")?.args.team)===1);
+  system.startMapId=S.mapId;system.startX=ally?ally.x:0;system.startY=ally?ally.y:0;
+  await Astra.saveFile(p,Astra.mapPath(S.mapId),JSON.stringify(map));await Astra.saveFile(p,"data/System.json",JSON.stringify(system));
+  p.system=system;S.map=map;S.preview=null;renderAll();
+  await modal(`<h2>Prueba preparada</h2><p>Abre nuevamente RPG Maker MZ, ejecuta la prueba y elige <b>Nueva partida</b>. Debe abrir la batalla de ${esc(name)}. No uses una partida guardada anterior.</p><p class="help">Si hay error, pulsa F8 en el playtest y comparte el mensaje de la consola.</p>`,[{label:"Vale",value:0,cls:"gold"}]);
+ }catch(e){await modal(`<h2>No se pudo preparar</h2><p class="error">${esc(e.message)}</p>`,[{label:"Vale",value:0}]);}
 }
 
-// ---------- render general ----------
 function renderAll(){if(!S.map)return;S.check=M.check(S.map,S.mapId);renderTop();renderPalette();renderInspector();drawOverlay();}
 function renderTop(){
  $("undoBtn").disabled=!S.undo.length;$("redoBtn").disabled=!S.redo.length;
@@ -3363,7 +3453,7 @@ function selectedUnitHtml(e){
  const ally=M.kind(e)==="ally",actorId=c&&Number(c.args.actorId)||0,m=M.markers(S.map).find(x=>x.id===e.id)||{};
  const name=u&&u.name||(actorId&&(p.actors[actorId]||{}).name)||M.describe(e),cls=names(p.classes,u?u.classId:(c&&c.args.classId)||(actorId&&(p.actors[actorId]||{}).classId)||0),lv=u?u.level:c&&c.args.level||1;
  const hp=u?u.hp:0,max=u&&eng?eng.value(u,"health"):0,item=u&&u.inventory[u.equipped],w=item&&eng?eng.itemData(item):null;
- const portrait=ally&&actorId?`<canvas class="selport" width="96" height="96" data-actor="${actorId}"></canvas>`:`<canvas class="selport" id="heroCanvas" width="96" height="96"></canvas>`;
+ const portrait=actorId?`<canvas class="selport" width="96" height="96" data-actor="${actorId}"></canvas>`:`<canvas class="selport" id="heroCanvas" width="96" height="96"></canvas>`;
  return `<div class="selcard"><div class="ribbon">UNIDAD SELECCIONADA</div><div class="selbody">${portrait}<div class="selinfo">
   <b class="selname">${esc(name)}</b><span class="selsub">${esc(cls)} · Nv. ${esc(lv)}</span>
   <span class="selteam ${ally?"ally":"foe"}"><img src="${Astra.pixelUrl(ally?"ally":"enemy",32)}" alt="">${ally?(m.lord?"Aliado · Líder":"Aliado"):(m.boss?"Enemigo · Jefe":"Enemigo")}</span>
@@ -3408,7 +3498,7 @@ function terrainHtml(){
 }
 function selectionHtml(e){
  const cmds=M.commands(e),kind=M.kind(e),unit=cmds.find(c=>["Enemy","Ally","Unit"].indexOf(c.id)>=0);
- let html=`<div class="card"><div class="hero"><canvas id="heroCanvas" width="72" height="72"></canvas><div><div class="name">${esc(M.describe(e))}</div><div class="sub">Evento ${e.id} · casilla ${e.x}, ${e.y}</div>${unit?`<div class="chips" style="margin-top:6px">${Object.keys(M.addons).filter(id=>!M.find(e,id)).map(id=>`<button class="btn small" data-add="${id}">+ ${M.addons[id]}</button>`).join("")}</div>`:""}</div></div>${unit?statsHtml(e):""}
+ let html=`<div class="card"><div class="hero">${unit&&Number(unit.args.actorId)?`<canvas data-actor="${Number(unit.args.actorId)}" width="72" height="72"></canvas>`:`<canvas id="heroCanvas" width="72" height="72"></canvas>`}<div><div class="name">${esc(M.describe(e))}</div><div class="sub">Evento ${e.id} · casilla ${e.x}, ${e.y}</div>${unit?`<div class="chips" style="margin-top:6px">${Object.keys(M.addons).filter(id=>!M.find(e,id)).map(id=>`<button class="btn small" data-add="${id}">+ ${M.addons[id]}</button>`).join("")}</div>`:""}</div></div>${unit?statsHtml(e):""}
   <div class="chips" style="margin-top:10px">${kind&&kind!=="mission"?`<button class="btn small danger" data-act="delete">🗑 Borrar</button>`:""}${kind==="mission"?"":`<button class="btn small" data-act="duplicate" title="Elige una casilla para la copia">⧉ Duplicar</button>`}</div></div>`;
  if(!cmds.length)html+=`<div class="card"><p class="help">Este evento no tiene comandos de TacticsMZ. Edítalo en el editor de MZ.</p></div>`;
  cmds.forEach(c=>{const def=T.catalog.find(d=>d.id===c.id),removable=M.addons[c.id];
@@ -3633,6 +3723,7 @@ function boot(){
  $("inspectorBody").addEventListener("input",ev=>{if(ev.target.id!=="rosterFind")return;S.rosterFind=ev.target.value;const q=S.rosterFind.trim().toLowerCase();
   $("inspectorBody").querySelectorAll(".urow").forEach(r=>r.classList.toggle("hidden",!!q&&r.dataset.find.indexOf(q)<0));});
  $("playBtn").onclick=playtest;
+ const mapsBtn=document.createElement("button");mapsBtn.id="manageMapsBtn";mapsBtn.className="btn small";mapsBtn.textContent="🗺 Mapas";mapsBtn.title="Administrar y depurar mapas con respaldo";mapsBtn.onclick=manageMaps;$('mission').insertBefore(mapsBtn,$('light'));
  $("inspectorBody").addEventListener("click",onInspectorClick);$("inspectorBody").addEventListener("change",onInspectorChange);
  $("mapSelect").addEventListener("change",ev=>loadMap(Number(ev.target.value)));
  $("undoBtn").onclick=undo;$("redoBtn").onclick=redo;$("saveBtn").onclick=save;
@@ -4723,7 +4814,7 @@ async function installGraphics(p,pack,ctx,data,plan,res,source,options,hint){
  async function face(id){if(!id)return null;if(faceCache.has(id))return faceCache.get(id);const im=R.portrait(ctx,id);if(!im){faceCache.set(id,null);return null;}const path=base+"faces/"+id+".png",name="FE8_"+source+"_Face_"+id;const cv=await png(p,path,im);if(options.native)await nativeFace(p,name,cv);const f={path,width:im.width,height:im.height,fe8Source:source,fe8PortraitId:id};faceCache.set(id,{f,name});return {f,name};}
  if(options.faces){for(const c of plan.characters){const row=p.actors[res.ids.characters[c.id]];if(!row)continue;const cls=data.classes[c.classId],id=c.portraitId||(cls&&cls.portraitId)||0;if(!id)continue;
   if(!options.replace&&(pack.faces[row.id]&&!pack.faces[row.id].fe8Source||row.faceName&&!row.faceName.startsWith("FE8_")))continue;
-  try{hint("Retratos · "+c.name);const f=await face(id);if(!f){warn(c.name,"retrato "+id+" no legible");continue;}pack.faces[row.id]=Object.assign({name:c.name},f.f);r.portraits++;
+  try{hint("Retratos · "+c.name);const f=await face(id);if(!f){warn(c.name,"retrato "+id+" no legible");continue;}pack.faces[row.id]=Object.assign({name:c.name},f.f);D.set("actors",row,"faceKey",String(row.id));r.portraits++;
    if(options.native&&(!row.faceName||row.faceName.startsWith("FE8_")||options.replace)){D.set("actors",row,"faceName",f.name);D.set("actors",row,"faceIndex",0);r.nativeFaces++;}
   }catch(e){warn(c.name,e);}await pause();}}
  async function animation(id){
@@ -4795,7 +4886,7 @@ Astra.openRomImport=function(initial){
  const p=P();if(!p)return Astra.ui.toast("Primero abre tu proyecto.");
  const {win,closeWin}=Astra.imgTools;
  const S={clean:null,hack:null,result:null,plan:null,busy:false,sequence:0,diagnostic:null,lastError:null,stage:"Esperando ROM",lastAction:null};
- const w=win(`<header><h2>🎮 Importar Fire Emblem: The Sacred Stones (FE8 · LOTE v3)</h2><span class="grow"></span><button class="btn small" data-x="close">✕</button></header>
+ const w=win(`<header><h2>🎮 Importar Fire Emblem: The Sacred Stones (FE8 · LOTE v4)</h2><span class="grow"></span><button class="btn small" data-x="close">✕</button></header>
   <div class="awbody single"><div class="romimp">
    <p>Importa directamente tu <b>ROM de Fire Emblem: The Sacred Stones (USA)</b>: sus capítulos, mapas, terreno y unidades. <b>Solo necesitas el archivo .gba. Incluye recursos gráficos cuando sean legibles.</b> Si quieres importar un hack, agrega un segundo archivo para comparar sus cambios con la ROM original.</p>
    <div class="romslots">
@@ -4811,7 +4902,7 @@ Astra.openRomImport=function(initial){
  const describeContext=ctx=>({gameCode:R.gameCode(ctx.rom),crc:R.crc32(ctx.rom).toString(16).padStart(8,"0"),size:ctx.rom.length,notes:ctx.notes||[],errors:ctx.errors||[],tables:Object.fromEntries(["characters","classes","items","chapters","assets","text"].map(k=>[k,ctx[k+"At"]??null])),huffman:ctx.huffman||null,layout:ctx.layout||null});
  function downloadDiagnostic(){
   const result=S.result,d=result&&result.hdata,ctx=result&&result.hctx;
-  const report={version:"FE8 LOTE v3",stage:S.stage,error:S.lastError,busy:S.busy,mode:result&&result.mode,rom:S.diagnostic,preflight:result&&result.diagnostics||null,counts:d?{characters:Object.keys(d.characters).length,classes:Object.keys(d.classes).length,items:Object.keys(d.items).length,chapters:d.chapters.length}:null,chapters:d?d.chapters.map(c=>({index:c.index,name:c.name,width:c.map.width,height:c.map.height,units:c.units.length})):[],selected:result?chosen():[],action:S.lastAction,options:result?Object.fromEntries(["riData","riDraw","riFaces","riSprites","riBattle","riIcons","riNative","riReplace"].map(k=>[k,!!$(k)?.checked])):null,pluginStatus:p.pluginStatus||null,resourcePack:p.packName||null,tileSize:p.tileSize||null,importResult:S.importSummary||null};
+  const report={version:"FE8 LOTE v4",stage:S.stage,error:S.lastError,busy:S.busy,mode:result&&result.mode,rom:S.diagnostic,preflight:result&&result.diagnostics||null,counts:d?{characters:Object.keys(d.characters).length,classes:Object.keys(d.classes).length,items:Object.keys(d.items).length,chapters:d.chapters.length}:null,chapters:d?d.chapters.map(c=>({index:c.index,name:c.name,width:c.map.width,height:c.map.height,units:c.units.length})):[],selected:result?chosen():[],action:S.lastAction,options:result?Object.fromEntries(["riData","riDraw","riFaces","riSprites","riBattle","riIcons","riNative","riReplace"].map(k=>[k,!!$(k)?.checked])):null,pluginStatus:p.pluginStatus||null,resourcePack:p.packName||null,tileSize:p.tileSize||null,importResult:S.importSummary||null};
   if(ctx)report.rom=describeContext(ctx);
   const blob=new Blob([JSON.stringify(report,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="FE8_Diagnostico_"+(report.rom&&report.rom.crc||"sin_rom")+".json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
  }
@@ -4969,7 +5060,7 @@ Astra.openRomImport=function(initial){
    Astra.ui.modal(`<h2>🎮 Fire Emblem importado</h2><p>${r.maps} mapa${r.maps===1?"":"s"}, ${r.units} unidades, ${r.actors} personajes, ${r.classes} clases, ${r.weapons} armas y ${r.items} objetos nuevos${r.reused?` (y ${r.reused} que ya tenías, reutilizados)`:""}.</p>
     <p><b>Gráficos:</b> ${gr.portraits} retratos, ${gr.standing} sprites de reposo, ${gr.moving} sprites de movimiento, ${gr.animations} animaciones (${gr.clips} pistas), ${gr.assigned} asignaciones, ${gr.icons} iconos, ${gr.nativeTilesets} tilesets MZ y ${gr.nativeCharacters} hojas de personajes nativas.</p>
     ${gr.warnings.length?`<p class="help">⚠ ${gr.warnings.length} avisos. Informe completo: data/FE8_Import_${source}.json.</p><details><summary>Primeros avisos</summary><p class="help">${gr.warnings.slice(0,12).map(esc).join("<br>")}</p></details>`:""}
-    <p class="help">Abre MZ de nuevo y prueba desde el menú táctico de TacticsMZ. Los diálogos, refuerzos, efectos especiales y recompensas de eventos requieren conversión adicional; no se han importado.</p>`,[{label:"Vale",value:0,cls:"gold"}]);
+    <p class="help">Abre MZ de nuevo. Usa «Probar misión» en ASTRA para preparar el mapa inicial de prueba, o el menú táctico «Misiones del editor» en el juego. Los mapas con aliados incluyen un evento de inicio automático. Los diálogos, refuerzos, efectos especiales y recompensas de eventos requieren conversión adicional; no se han importado.</p>`,[{label:"Vale",value:0,cls:"gold"}]);
    }catch(e){hint("✖ "+e.message,true);}
    finally{S.busy=false;controls.forEach((el,i)=>el.disabled=disabledBefore[i]);if($("riPlan")&&$("riRepairGo")&&S.result)plan();}
   }
