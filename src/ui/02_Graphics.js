@@ -1,11 +1,3 @@
-/* TacticsMZ | Copyright (c) 2026 TacticsMZ contributors | MIT License */
-/*:
- * @target MZ
- * @plugindesc TacticsMZ: renderizador de atlas, retratos y secuencias de capas externas.
- * @author TacticsMZ contributors
- * @help Código MIT. Las imágenes y secuencias externas conservan sus propias licencias.
- * Cargar después de TacticsView y antes de TacticsMZ.
- */
 (function(root){
 "use strict";
 const T=root.Tactics,G=T.Graphics={};
@@ -55,7 +47,7 @@ G.bitmap=function(view,path,u,flash,paletteMode){
  const original=view.image(path);if(!original)return null;const pack=G.pack(view),colors=u&&u.customColors?u.colors:null,team=paletteMode==="map"&&u?(u.acted?0:u.team):1;
  const id=path+":"+team+":"+JSON.stringify(colors)+":"+!!flash;view.resourceImages=view.resourceImages||{};if(view.resourceImages[id])return view.resourceImages[id];
  const canvas=document.createElement("canvas");canvas.width=original.width;canvas.height=original.height;const c=canvas.getContext("2d");c.drawImage(original,0,0);
- const im=c.getImageData(0,0,canvas.width,canvas.height),d=im.data;const key=d[3]>0&&d[0]<24&&d[1]<150&&d[2]>200?[d[0],d[1],d[2]]:null;
+ const im=c.getImageData(0,0,canvas.width,canvas.height),d=im.data;const key=!path.startsWith("img/astra/fe8/")&&d[3]>0&&d[0]<24&&d[1]<150&&d[2]>200?[d[0],d[1],d[2]]:null;
  const replacements={};if(pack.palette&&paletteMode==="map")pack.palette.source.forEach((rgb,i)=>{const to=(pack.palette.teams[team]||pack.palette.source)[i]||rgb;replacements[(rgb[0]<<16)|(rgb[1]<<8)|rgb[2]]=to;});
  for(let i=0;i<d.length;i+=4){if(key&&d[i]===key[0]&&d[i+1]===key[1]&&d[i+2]===key[2]){d[i+3]=0;continue;}if(!d[i+3])continue;
   if(flash){d[i]=255;d[i+1]=248;d[i+2]=230;continue;}
@@ -85,9 +77,10 @@ G.battle=function(view,u,x,y,scale,facing,pose,flash){
 G.map=function(view,u,x,y,size,pose,flash){
  if(u.graphic)return false;
  const art=G.art(view,u);if(!art)return false;const moving=pose>0,entry=moving&&art.walk?art.walk:art.map;if(!entry)return true;
- const image=G.bitmap(view,entry.path,u,flash,"map");if(!image)return true;
- const scale=size/16,pattern=moving?Math.floor(pose)%4:[0,1,2,1][Math.floor(view.frame/16)%4],width=entry.width,height=entry.height;
- const direction=u.direction||2,row=moving?Math.max(0,Math.min(3,(direction-2)/2)):view.selected()===u?2:0;
+ const path=entry.teamPaths&&(entry.teamPaths[u.acted?0:u.team]||entry.teamPaths[1])||entry.path;
+ const image=G.bitmap(view,path,u,flash,entry.teamPaths?"fe8map":"map");if(!image)return true;
+ const scale=size/16,pattern=moving&&art.walk?Math.floor(pose)%4:[0,1,2,1][Math.floor(view.frame/16)%4],width=entry.width,height=entry.height;
+ const direction=u.direction||2,row=moving&&art.walk?Math.max(0,Math.min(3,(direction-2)/2)):view.selected()===u?2:0;
  view.ctx.save();view.ctx.imageSmoothingEnabled=false;view.ctx.drawImage(image,pattern*width,row*height,width,height,x-width*scale/2,y-(entry.anchorY||height)*scale,width*scale,height*scale);view.ctx.restore();return true;
 };
 // Fit the visible bust, not the transparent margins of its sheet. Compose facial
@@ -114,8 +107,7 @@ G.drawPortrait=function(view,frame,x,y,w,h){
  const c=view.ctx;c.save();c.imageSmoothingEnabled=false;c.drawImage(frame.image,r.x,r.y,r.w,r.h,d.x,d.y,d.w,d.h);c.restore();
 };
 G.face=function(view,u,x,y,w,h){
- if(u.face)return false;
- const p=G.pack(view),a=p&&p.faces&&(p.faces[u.faceKey||u.actorId]||p.faces.default);if(!a)return false;const img=G.bitmap(view,a.path,u,false,"face");if(!img)return true;
+ const p=G.pack(view),a=p&&p.faces&&(p.faces[u.faceKey||u.actorId]||p.faces.default);if(!a||u.face&&!a.fe8Source)return false;const img=G.bitmap(view,a.path,u,false,"face");if(!img)return true;
  G.drawPortrait(view,G.portraitFrame(view,img,{x:0,y:0,w:a.width,h:a.height},a.features),x,y,w,h);return true;
 };
 G.background=function(view,m){

@@ -66,7 +66,7 @@ Astra.clearArtCache=()=>Object.keys(artCache).forEach(k=>delete artCache[k]);
 Astra.artSprite=async function(p,art,team){
  const key=art+":"+team;if(key in artCache)return artCache[key];
  const unit=p.pack&&p.pack.units&&p.pack.units[art];let out=null;
- if(unit&&unit.map){const im=await Astra.image(p,unit.map.path);if(im)out=Astra.crop({im,sx:0,sy:0,w:unit.map.width,h:unit.map.height},p.pack.palette,team);}
+ if(unit&&unit.map){const im=await Astra.image(p,unit.map.teamPaths&&unit.map.teamPaths[team]||unit.map.path);if(im)out=Astra.crop({im,sx:0,sy:0,w:unit.map.width,h:unit.map.height},unit.map.teamPaths?null:p.pack.palette,team);}
  return artCache[key]=out;
 };
 // Gráfico de personaje de MZ (img/characters), recortado.

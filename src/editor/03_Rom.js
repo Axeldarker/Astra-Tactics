@@ -110,6 +110,7 @@ function relocate(rom,refs,fallback){
 }
 // Primer índice de la tabla: algunas empiezan por una fila vacía. Se elige el desfase que cuadra con el campo "número".
 function tableShift(rom,base,def){
+ if(base<0)return {shift:0,score:0};
  let best=0,score=-1;
  [0,1].forEach(shift=>{let s=0;for(let k=0;k<12;k++){const o=base+k*def.size;if(o+def.size<=rom.length&&rom[o+def.numberAt]===k+shift&&k+shift>0)s++;}if(s>score){score=s;best=shift;}});
  return {shift:best,score};
@@ -161,24 +162,25 @@ R.read=function(ctx){
  const rom=ctx.rom,F=R.FE8U,name=(id,fallback)=>ctx.text(id)||fallback;
  const ranks=o=>{const r={};for(let k=0;k<8;k++)if(rom[o+k]){const c=WEAPON_TYPES[k];r[c]=Math.max(r[c]||0,rom[o+k]);}return r;};
  const data={};
- data.characters=readTable(rom,ctx.charactersAt,F.characters,ctx.charactersShift,(o,id)=>({id,nameId:u16(rom,o),name:name(u16(rom,o),"Personaje "+id),classId:rom[o+5],
+ data.characters=readTable(rom,ctx.charactersAt,F.characters,ctx.charactersShift,(o,id)=>({id,nameId:u16(rom,o),name:name(u16(rom,o),"Personaje "+id),classId:rom[o+5],portraitId:u16(rom,o+6),
   level:rom[o+0xB],bases:{health:s8(rom[o+0xC]),power:s8(rom[o+0xD]),skill:s8(rom[o+0xE]),speed:s8(rom[o+0xF]),defense:s8(rom[o+0x10]),resistance:s8(rom[o+0x11]),luck:s8(rom[o+0x12]),build:s8(rom[o+0x13])},
   ranks:ranks(o+0x14),growth:{health:rom[o+0x1C],power:rom[o+0x1D],skill:rom[o+0x1E],speed:rom[o+0x1F],defense:rom[o+0x20],resistance:rom[o+0x21],luck:rom[o+0x22]},
   attributes:u32(rom,o+0x28),compare:[0,0x28]}));
- data.classes=readTable(rom,ctx.classesAt,F.classes,ctx.classesShift,(o,id)=>({id,nameId:u16(rom,o),name:name(u16(rom,o),"Clase "+id),promotion:rom[o+5],
+ data.classes=readTable(rom,ctx.classesAt,F.classes,ctx.classesShift,(o,id)=>({id,nameId:u16(rom,o),name:name(u16(rom,o),"Clase "+id),promotion:rom[o+5],smsId:rom[o+6],portraitId:u16(rom,o+8),
   bases:{health:rom[o+0xB],power:rom[o+0xC],skill:rom[o+0xD],speed:rom[o+0xE],defense:rom[o+0xF],resistance:rom[o+0x10],build:rom[o+0x11],move:rom[o+0x12]},
   growth:{health:rom[o+0x1B],power:rom[o+0x1C],skill:rom[o+0x1D],speed:rom[o+0x1E],defense:rom[o+0x1F],resistance:rom[o+0x20],luck:rom[o+0x21]},
   attributes:u32(rom,o+0x28),ranks:ranks(o+0x2C),compare:[0,0x34]}));
  data.items=readTable(rom,ctx.itemsAt,F.items,ctx.itemsShift,(o,id)=>{const type=rom[o+7],range=rom[o+0x19];
-  return {id,nameId:u16(rom,o),name:name(u16(rom,o),"Objeto "+id),type,attributes:u32(rom,o+8),uses:rom[o+0x14],might:rom[o+0x15],hit:rom[o+0x16],weight:rom[o+0x17],crit:rom[o+0x18],
+  return {id,nameId:u16(rom,o),name:name(u16(rom,o),"Objeto "+id),iconId:rom[o+0x1D],type,attributes:u32(rom,o+8),uses:rom[o+0x14],might:rom[o+0x15],hit:rom[o+0x16],weight:rom[o+0x17],crit:rom[o+0x18],
    minRange:range>>4,maxRange:range&0xF,cost:u16(rom,o+0x1A),rank:rom[o+0x1C],weapon:type<8&&!!(u32(rom,o+8)&5),compare:[0,0x0C,0x14,0x24]};});
  data.chapters=readChapters(ctx);
+ data.chapters.forEach(ch=>{ch.units=ch.units.filter(u=>{const c=data.characters[u.character];u.classId=u.classId||(c&&c.classId)||0;return u.team<=2&&!!data.classes[u.classId];});});
  return data;
 };
 const s8=v=>v>127?v-256:v;
 
 // ---------- capítulos ----------
-const asset=(ctx,i)=>{const o=ctx.assetsAt+i*4;return i>0&&o+4<=ctx.rom.length?off(ctx.rom,u32(ctx.rom,o)):-1;};
+const asset=(ctx,i)=>{const o=ctx.assetsAt+i*4;return ctx.assetsAt>=0&&i>0&&o+4<=ctx.rom.length?off(ctx.rom,u32(ctx.rom,o)):-1;};
 function mapAt(ctx,i){const o=asset(ctx,i);if(o<0)return null;const d=R.lz77(ctx.rom,o,0x4000);if(!d||d.length<2)return null;const w=d[0],h=d[1];if(w<1||h<1||w>80||h>80||d.length<2+w*h*2)return null;
  const tiles=[];for(let k=0;k<w*h;k++)tiles.push(u16(d,2+k*2));return {width:w,height:h,tiles};}
 function configAt(ctx,i){const o=asset(ctx,i);if(o<0)return null;const d=R.lz77(ctx.rom,o,0x4000);return d&&d.length>=0x2400?d:null;}
@@ -220,7 +222,7 @@ R.units=function(rom,at){
   const u={character:rom[o],classId:rom[o+1],leader:rom[o+2],autolevel:b3&1,team:(b3>>1)&3,level:b3>>3,x:pos&63,y:(pos>>6)&63,
    items:Array.from(rom.subarray(o+12,o+16)).filter(Boolean),ai:Array.from(rom.subarray(o+16,o+20))};
   // Si entra caminando (REDA), su sitio es la última parada.
-  const n=rom[o+6],rp=off(rom,u32(rom,o+8));if(n&&n<16&&rp>=0){const last=rp+(n-1)*8,packed=u16(rom,last);u.redaX=packed&63;u.redaY=(packed>>6)&63;u.redaBytes=[rom[last],rom[last+1]];}
+  const n=rom[o+7],rp=off(rom,u32(rom,o+8));if(n&&n<16&&rp>=0&&rp+n*8<=rom.length){const last=rp+(n-1)*8,packed=u16(rom,last);u.redaX=packed&63;u.redaY=(packed>>6)&63;u.redaBytes=[rom[last],rom[last+1]];}
   out.push(u);}
  return out;
 };
@@ -232,7 +234,7 @@ function readChapters(ctx){
   const ch={index:c,offset:o,bytes:Array.from(rom.subarray(o,o+F.size)),map,assets:{map:rom[o+L.map],config:L.config>=0?rom[o+L.config]:0,obj1:L.config>=0?rom[o+L.obj1]:0,obj2:L.config>=0?rom[o+L.obj2]:0,palette:L.config>=0?rom[o+L.palette]:0}};
   const np=off(rom,u32(rom,o));ch.name=np>=0?printable(rawText(rom,np,40)):"";
   if(!/^[\x20-\x7E]{2,40}$/.test(ch.name))ch.name="";
-  ch.name=ch.name||"Capítulo "+c;
+  const title=ctx.text(u16(rom,o+0x70));ch.internalName=ch.name;ch.name=title&&title.length>=2&&title.length<=80?title:ch.name||"Capítulo "+c;
   const cfg=ch.assets.config?configAt(ctx,ch.assets.config):null;
   ch.terrain=map.tiles.map(t=>cfg?cfg[0x2000+(t>>2)]||0:0);
   ch.units=[];
@@ -272,10 +274,10 @@ R.diff=function(clean,hack){
 // Qué se importa: los capítulos elegidos y los personajes, clases y objetos cambiados o que esos capítulos usan.
 R.plan=function(data,chapterIds,opts){
  opts=opts||{};const chapters=data.chapters.filter(c=>chapterIds.indexOf(c.index)>=0),need={characters:new Set(),classes:new Set(),items:new Set()};
- ["characters","classes","items"].forEach(k=>{if(opts.changedData!==false)Object.values(data[k]).forEach(r=>{if(r.changed)need[k].add(r.id);});});
- chapters.forEach(ch=>ch.units.forEach(u=>{if(u.team!==2||isBoss(data,u))need.characters.add(u.character);need.classes.add(u.classId);u.items.forEach(i=>need.items.add(i));}));
+ ["characters","classes","items"].forEach(k=>{if(opts.allData||opts.changedData!==false)Object.values(data[k]).forEach(r=>{if(opts.allData||r.changed)need[k].add(r.id);});});
+ chapters.forEach(ch=>ch.units.forEach(u=>{if(u.team!==2||isBoss(data,u)||(data.characters[u.character]&&data.characters[u.character].portraitId))need.characters.add(u.character);need.classes.add(u.classId);u.items.forEach(i=>need.items.add(i));}));
  [...need.characters].forEach(id=>{const c=data.characters[id];if(c&&c.classId)need.classes.add(c.classId);});
- [...need.classes].forEach(id=>{const c=data.classes[id];if(c&&c.promotion&&data.classes[c.promotion]&&need.classes.size<255)need.classes.add(c.promotion);});
+ for(const id of need.classes){const c=data.classes[id];if(c&&c.promotion&&data.classes[c.promotion]&&need.classes.size<255)need.classes.add(c.promotion);}
  const pick=k=>[...need[k]].filter(id=>data[k][id]).sort((a,b)=>a-b).map(id=>data[k][id]);
  return {chapters,characters:pick("characters"),classes:pick("classes"),items:pick("items")};
 };
@@ -295,28 +297,30 @@ const stat=(o,k)=>Math.max(0,o[k]||0);
 // Escribe el plan en el proyecto (listas de MZ en memoria). Devuelve los mapas nuevos para guardarlos.
 R.apply=function(p,plan,opts){
  opts=opts||{};const ids={characters:{},classes:{},items:{}},report={classes:0,actors:0,weapons:0,items:0,maps:0,units:0,reused:0};
- const reuse=(list,name)=>{const r=(list||[]).find(x=>x&&x.name===name);if(r)report.reused++;return r;};
+ // Stable FE IDs prevent merging separate classes or characters with the same display name.
+ const used=new Set(),reuse=(list,table,source)=>{const rows=(list||[]).filter(Boolean),matches=rows.filter(x=>D.fields(x,table).fe8Source===opts.source&&D.fields(x,table).fe8Id===source.id),legacy=rows.filter(x=>x.name===source.name&&!D.fields(x,table).fe8Source&&!used.has(x));const r=matches[0]||(legacy.length===1&&opts.reuseNames!==false?legacy[0]:null);if(r){report.reused++;used.add(r);}return r;};
+ const identify=(table,row,source)=>{if(opts.source){D.set(table,row,"fe8Source",opts.source);D.set(table,row,"fe8Id",source.id);}used.add(row);};
  // objetos y armas
- plan.items.forEach(it=>{const table=it.weapon?"weapons":"items",list=p[table];let row=reuse(list,it.name);
+ plan.items.forEach(it=>{const table=it.weapon?"weapons":"items",list=p[table];let row=reuse(list,table,it);
   if(!row){row=D.create(list,table,it.name);
    if(it.weapon){const cat=WEAPON_TYPES[it.type];D.set(table,row,"category",cat);["might","hit","crit","weight","minRange","maxRange","uses","rank"].forEach(k=>D.set(table,row,k,it[k]));
     if(cat==="arcane")D.set(table,row,"magic",true);if(cat==="staff"){D.set(table,row,"staff",true);D.set(table,row,"effect","heal");}}
    else D.set(table,row,"uses",it.uses||1);
    D.set(table,row,"price",it.cost*(it.uses||1));report[table]++;}
-  ids.items[it.id]={kind:it.weapon?"weapon":"item",id:row.id};});
+  identify(table,row,it);ids.items[it.id]={kind:it.weapon?"weapon":"item",id:row.id};});
  // clases
- plan.classes.forEach(c=>{let row=reuse(p.classes,c.name);
+ plan.classes.forEach(c=>{let row=reuse(p.classes,"classes",c);
   if(!row){row=D.create(p.classes,"classes",c.name);const b=c.bases,types=Object.keys(c.ranks);
    D.set("classes",row,"stats",{health:stat(b,"health"),power:stat(b,"power"),magic:stat(b,"power"),skill:stat(b,"skill"),speed:stat(b,"speed"),luck:0,defense:stat(b,"defense"),resistance:stat(b,"resistance"),move:stat(b,"move"),build:stat(b,"build")});
    const g=c.growth;D.set("classes",row,"growth",{health:g.health,power:g.power,magic:g.power,skill:g.skill,speed:g.speed,luck:g.luck,defense:g.defense,resistance:g.resistance,move:0,build:0});
    if(types.length){D.set("classes",row,"weaponTypes",types);D.set("classes",row,"ranks",c.ranks);}
    D.set("classes",row,"moveType",c.attributes&0x1800?"flying":c.attributes&0x400?"mounted":"foot");
    report.classes++;}
-  ids.classes[c.id]=row.id;});
+  identify("classes",row,c);ids.classes[c.id]=row.id;});
  plan.classes.forEach(c=>{const row=p.classes[ids.classes[c.id]],to=ids.classes[c.promotion];if(row&&to&&to!==row.id&&!D.fields(row,"classes").promotions)D.set("classes",row,"promotions",[to]);});
  // personajes (se suman las bases de la clase, como en FE)
  const firstUnit={};plan.chapters.forEach(ch=>ch.units.forEach(u=>{if(!firstUnit[u.character])firstUnit[u.character]=u;}));
- plan.characters.forEach(c=>{let row=reuse(p.actors,c.name);
+ plan.characters.forEach(c=>{let row=reuse(p.actors,"actors",c);
   if(!row){row=D.create(p.actors,"actors",c.name);const cls=plan.classes.find(x=>x.id===c.classId),cb=cls?cls.bases:{},b=c.bases;
    if(ids.classes[c.classId])D.set("actors",row,"classId",ids.classes[c.classId]);D.set("actors",row,"initialLevel",Math.max(1,c.level||1));
    const sum=k=>Math.max(0,(cb[k]||0)+(b[k]||0));
@@ -325,22 +329,23 @@ R.apply=function(p,plan,opts){
    if(Object.keys(c.ranks).length)D.set("actors",row,"ranks",c.ranks);
    const u=firstUnit[c.id];if(u&&u.items.length)D.set("actors",row,"inventory",u.items.map(i=>ids.items[i]).filter(Boolean));
    report.actors++;}
-  ids.characters[c.id]=row.id;});
+  identify("actors",row,c);ids.characters[c.id]=row.id;});
  // capítulos → mapas
  const maps=[],infos=p.mapInfos=p.mapInfos||[null];let nextId=Math.max(0,...infos.filter(Boolean).map(m=>m.id))+1,order=Math.max(0,...infos.filter(Boolean).map(m=>m.order||0))+1;
  const template=opts.template||{};
  plan.chapters.forEach(ch=>{
-  const id=nextId++,w=ch.map.width,h=ch.map.height,data=new Array(w*h*6).fill(0),ground=(template.data||[])[0]||0;
-  for(let k=0;k<w*h;k++){data[k]=ground;data[5*w*h+k]=ch.terrain[k]||0;}
+  const id=nextId++,w=ch.map.width,h=ch.map.height,data=new Array(w*h*6).fill(0),ground=opts.nativePreview?0:(template.data||[])[0]||0;
+  for(let k=0;k<w*h;k++){data[k]=ground;data[5*w*h+k]=opts.terrainIds?(opts.terrainIds[ch.terrain[k]]||0):(ch.terrain[k]||0);}
   const map={autoplayBgm:false,autoplayBgs:false,battleback1Name:"",battleback2Name:"",bgm:{name:"",pan:0,pitch:100,volume:90},bgs:{name:"",pan:0,pitch:100,volume:90},disableDashing:false,
    displayName:ch.name,encounterList:[],encounterStep:30,height:h,note:"",parallaxLoopX:false,parallaxLoopY:false,parallaxName:"",parallaxShow:true,parallaxSx:0,parallaxSy:0,
    scrollType:0,specifyBattleback:false,tilesetId:template.tilesetId||1,width:w,data,events:[null]};
   let throne=false;
-  ch.terrain.forEach((t,k)=>{const kind=MARKERS[t];if(!kind)return;if(kind==="goal"){if(throne)return;throne=true;}M.create(map,kind,k%w,Math.floor(k/w),{});});
+  ch.terrain.forEach((t,k)=>{const kind=MARKERS[t];if(!kind)return;if(kind==="goal"){if(throne)return;throne=true;}const e=M.create(map,kind,k%w,Math.floor(k/w),{});if(kind==="shop"){M.removeCommand(e,"Shop");M.setCommand(e,"Interaction",{type:"shop",name:"Tienda (sin inventario importado)",stock:[]});}});
   ch.units.forEach(u=>{const cls=ids.classes[u.classId]||0,inv=u.items.map(i=>ids.items[i]).filter(Boolean),weapon=inv.find(i=>i.kind==="weapon"),item=inv.find(i=>i.kind==="item"),actor=ids.characters[u.character];
    const named=plan.characters.find(x=>x.id===u.character),boss=u.team===2&&isBossIn(plan,u);
-   if(u.team===0&&actor)M.create(map,"ally",u.x,u.y,{actorId:actor,level:u.level});
-   else if(u.team===2&&!boss)M.create(map,"enemy",u.x,u.y,{classId:cls,level:u.level,role:u.ai[1]===3?"hold":"auto",weaponId:weapon?weapon.id:0,itemId:item?item.id:0});
+   if(!cls){report.skippedUnits=(report.skippedUnits||0)+1;return;}
+   if(u.team===0&&actor)M.create(map,"ally",u.x,u.y,{actorId:actor,level:u.level,lord:!!(named&&named.attributes&0x2000)});
+   else if(u.team===2&&!boss&&!(named&&named.portraitId))M.create(map,"enemy",u.x,u.y,{classId:cls,level:u.level,role:u.ai[1]===3?"hold":"auto",weaponId:weapon?weapon.id:0,itemId:item?item.id:0});
    else{// jefes y unidades verdes: ★ Unidad con su personaje (sus estadísticas propias)
     const e=M.create(map,"enemy",u.x,u.y,{});M.removeCommand(e,"Enemy");
     M.setCommand(e,"Unit",{actorId:actor||0,classId:cls,name:named?named.name:"",team:u.team===2?"2":u.team===0?"1":"3",level:u.level,weaponId:weapon?weapon.id:0,itemId:item?item.id:0,ai:boss||u.ai[1]===3?"hold":"approach",boss});}
@@ -350,5 +355,139 @@ R.apply=function(p,plan,opts){
   maps.push({id,chapter:ch,json:map,image:"img/astra/maps/Map"+String(id).padStart(3,"0")+".png"});report.maps++;});
  return {maps,report,ids};
 };
+// Allocate FE regions without overwriting the existing project's terrain definitions.
+R.terrainMapping=function(existing,chapters){const terrain=Object.assign({},existing),ids={};const all=[...new Set(chapters.flatMap(c=>c.terrain))].filter(n=>n>0).sort((a,b)=>a-b);for(const n of all){const def=R.TERRAIN[n];if(!def){ids[n]=0;continue;}const [name,cost,extra]=def;const row=Object.assign({name,cost,color:"#667f60",fe8TerrainId:n},extra||{});let id=Number(Object.keys(terrain).find(k=>terrain[k]&&terrain[k].fe8TerrainId===n))||0;if(!id){id=!terrain[n]?n:Array.from({length:255},(_,i)=>i+1).find(i=>!terrain[i]);T.assert(id,"No quedan regiones libres para terreno FE8");terrain[id]=row;}ids[n]=id;}return {terrain,ids};};
 const isBossIn=(plan,u)=>{const c=plan.characters.find(x=>x.id===u.character);return !!(c&&c.attributes&0x8000);};
+// ---------- Gráficos FE8U: decodificación local, sin descargar recursos ----------
+// Referencias de formato: FEBuilderGBA ROMFE8U / ImagePortraitForm / ImageUtilOAM,
+// fireemblem8u include/bmunit.h, include/banim_data.h, src/data_banimconf.c.
+// Las tablas se resuelven desde referencias del programa y se comprueban por estructura.
+const RGB5=v=>[(v&31)*255/31|0,((v>>5)&31)*255/31|0,((v>>10)&31)*255/31|0];
+const rgba=(w,h)=>({width:w,height:h,data:new Uint8ClampedArray(w*h*4)});
+const inRange=(b,o,n)=>Number.isInteger(o)&&o>=0&&n>=0&&o+n<=b.length;
+const ptrAt=(b,o)=>inRange(b,o,4)?off(b,u32(b,o)):-1;
+const palAt=(b,o,n=16)=>inRange(b,o,n*2)?Array.from({length:n},(_,i)=>RGB5(u16(b,o+i*2))):null;
+const lzAt=(b,o,max)=>inRange(b,o,4)?R.lz77(b,o,max):null;
+function pixel(dst,x,y,c){if(x<0||y<0||x>=dst.width||y>=dst.height||!c)return;const k=(y*dst.width+x)*4;dst.data.set([c[0],c[1],c[2],255],k);}
+// GBA 4bpp: mosaicos 8x8, nibble bajo primero. El índice 0 es transparente.
+R.decode4bpp=function(bytes,w,h,pal){
+ if(!bytes||!pal||w%8||h%8||w<8||h<8||w*h/2>bytes.length)return null;
+ const im=rgba(w,h),stride=w/8;
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++){const k=((y>>3)*stride+(x>>3))*32+(y&7)*4+((x&7)>>1),v=bytes[k],n=x&1?v>>4:v&15;if(n)pixel(im,x,y,pal[n]);}
+ return im;
+};
+function blit(dst,src,sx,sy,w,h,dx,dy,flip=false){
+ if(!src)return;for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+  const X=dx+x,Y=dy+y,A=sx+(flip?w-1-x:x),B=sy+y;if(X<0||Y<0||X>=dst.width||Y>=dst.height||A<0||B<0||A>=src.width||B>=src.height)continue;
+  const a=(B*src.width+A)*4,b=(Y*dst.width+X)*4;if(src.data[a+3])dst.data.set(src.data.subarray(a,a+4),b);
+ }
+}
+function bounds(im){let x=im.width,y=im.height,r=-1,b=-1;for(let j=0;j<im.height;j++)for(let i=0;i<im.width;i++)if(im.data[(j*im.width+i)*4+3]){x=Math.min(x,i);y=Math.min(y,j);r=Math.max(r,i);b=Math.max(b,j);}return r<0?null:{x,y,w:r-x+1,h:b-y+1};}
+const GFX_REFS={faces:[0x5524],standing:[0x26730,0x267B0,0x26838,0x26C88,0x28064,0x27F74],moving:[0x79584,0x79598,0xBAC2C,0xBAC40],battle:[0x59BD8,0x5A600,0x5A694,0x5A82C,0x6F6A8,0x70A60],icons:[0x36B4],iconPal:[0x35D0]};
+function tableCandidates(rom,refs,score){const candidates=[...new Set(refs.map(x=>ptrAt(rom,x)).filter(x=>x>=0))];const ranked=candidates.map(at=>({at,score:score(at)})).sort((a,b)=>b.score-a.score);return ranked.length&&ranked[0].score>0?ranked[0].at:-1;}
+R.graphicTables=function(ctx){
+ if(ctx.graphicTables)return ctx.graphicTables;const b=ctx.rom;
+ const count=(start,step,test)=>{let n=0;for(let i=0;i<12;i++){const at=start+i*step;if(inRange(b,at,step)&&test(at))n++;}return n>=3?n:0;};
+ const compressed=o=>o>=0&&b[o]===0x10;
+ const faces=tableCandidates(b,GFX_REFS.faces,a=>count(a,28,o=>compressed(ptrAt(b,o))&&inRange(b,ptrAt(b,o+8),32)));
+ const standing=tableCandidates(b,GFX_REFS.standing,a=>count(a,8,o=>b[o+2]<=2&&compressed(ptrAt(b,o+4))));
+ const moving=tableCandidates(b,GFX_REFS.moving,a=>count(a,8,o=>compressed(ptrAt(b,o))&&ptrAt(b,o+4)>=0));
+ const battle=tableCandidates(b,GFX_REFS.battle,a=>count(a,32,o=>inRange(b,ptrAt(b,o+12),48)&&compressed(ptrAt(b,o+16))&&compressed(ptrAt(b,o+20))&&compressed(ptrAt(b,o+28))));
+ const iconPal=ptrAt(b,GFX_REFS.iconPal[0]),icons=ptrAt(b,GFX_REFS.icons[0]);
+ return ctx.graphicTables={faces,standing,moving,battle,icons,iconPal};
+};
+R.portrait=function(ctx,id){
+ const b=ctx.rom,t=R.graphicTables(ctx).faces;if(t<0||!Number.isInteger(id)||id<=0||id>511)return null;const a=t+id*28;if(!inRange(b,a,28))return null;
+ const p=palAt(b,ptrAt(b,a+8)),gfx=lzAt(b,ptrAt(b,a),0x10000);
+ if(!p||!gfx){const other=lzAt(b,ptrAt(b,a+16),0x10000);if(!p||!other||other.length%320)return null;const h=other.length/40;if(h>160||h%8)return null;return R.decode4bpp(other,80,h,p);}
+ // Main portrait is stored in a 32-tile-wide strip, not a linear 96x80 image.
+ const sheet=R.decode4bpp(gfx,256,32,p);if(!sheet)return null;
+ const im=rgba(96,80);
+ // The centre consists of two 64x32 blocks, with four shoulder/edge strips.
+ for(const [sx,sy,w,h,dx,dy] of [[0,0,64,32,16,0],[64,0,64,32,16,32],[128,0,32,16,16,64],[160,0,16,32,0,48],[128,16,32,16,48,64],[176,0,16,32,80,48]])blit(im,sheet,sx,sy,w,h,dx,dy);
+ return bounds(im)?im:null;
+};
+R.mapPalettes=function(ctx){const b=ctx.rom,a=0x59EE20;return [4,0,1,2].map(i=>palAt(b,a+i*32));};
+R.standingSprite=function(ctx,id,team=1){
+ const b=ctx.rom,t=R.graphicTables(ctx).standing;if(t<0||!Number.isInteger(id)||id<0||id>255)return null;const a=t+id*8;
+ if(!inRange(b,a,8))return null;const dims=[[16,16],[16,32],[32,32]][b[a+2]],p=R.mapPalettes(ctx)[team],gfx=lzAt(b,ptrAt(b,a+4),0x4000);
+ if(!dims||!p||!gfx)return null;const [w,h]=dims;if(gfx.length!==w*h*3/2)return null;
+ const src=R.decode4bpp(gfx,w,h*3,p);if(!src||!bounds(src))return null;const im=rgba(w*4,h*3);
+ for(let row=0;row<3;row++)for(let i=0;i<4;i++)blit(im,src,0,[0,1,2,1][i]*h,w,h,i*w,row*h);
+ return {image:im,width:w,height:h,anchorY:h};
+};
+// Preserve the complete source moving sheet. Direction assignment assumes the standard vanilla sheet
+// convention: 4 down, 4 up, 4 side, 3 selected; custom AP scripts may use a different layout.
+R.movingSprite=function(ctx,classId,team=1){
+ const b=ctx.rom,t=R.graphicTables(ctx).moving;if(t<0||classId<1||classId>255)return null;
+ const a=t+(classId-1)*8,gfx=lzAt(b,ptrAt(b,a),0x10000),p=R.mapPalettes(ctx)[team];
+ if(!gfx||!p||gfx.length!==32*32*15/2)return null;const src=R.decode4bpp(gfx,32,32*15,p);if(!src||!bounds(src))return null;
+ const im=rgba(128,128),seq=[0,8,8,4];for(let row=0;row<4;row++)for(let f=0;f<4;f++)blit(im,src,0,(seq[row]+f)*32,32,32,f*32,row*32,row===2);
+ return {image:im,source:src,width:32,height:32,anchorY:32};
+};
+R.itemIcon=function(ctx,id){const b=ctx.rom,t=R.graphicTables(ctx),p=palAt(b,t.iconPal),a=t.icons+id*128;if(t.icons<0||!p||id<0||id>255||!inRange(b,a,128))return null;return R.decode4bpp(b.subarray(a,a+128),16,16,p);};
+R.classAnimationDefs=function(ctx,cls){
+ const b=ctx.rom,a=ptrAt(b,cls.offset+0x34),out=[];if(a<0)return out;
+ for(let i=0;i<64;i++){const o=a+i*4;if(!inRange(b,o,4))break;const type=u16(b,o),id=u16(b,o+2);if(!type&&!id)break;if(!id||id>1024||type>0x1FF)break;out.push({id,type:type&255,byType:!!(type&256)});}
+ return out;
+};
+const s16=v=>v&0x8000?v-0x10000:v;
+const SIZES=[[[8,8],[16,16],[32,32],[64,64]],[[16,8],[32,8],[32,16],[64,32]],[[8,16],[8,32],[16,32],[32,64]]];
+// Render the non-affine OAM objects with 2D tile addressing and the GBA draw order.
+// Affine frames are not silently approximated: reject them and report the affected animation.
+R.battleFrame=function(gfx,oam,start,pal){
+ if(!gfx||gfx.length<8192||!oam||!pal||!Number.isInteger(start)||start<0)return null;
+ const objects=[];let end=false;for(let i=start,n=0;n<256&&inRange(oam,i,12);i+=12,n++){
+  if(oam[i]===1||u32(oam,i)===0xFFFFFF00){end=true;break;}
+  if(oam[i+2]===255&&oam[i+3]===255)throw new Error("OAM afín no soportado");
+  if(oam[i]!==0)throw new Error("OAM inválido");
+  const a=oam[i+1],s=oam[i+3];if(a&3)throw new Error("OAM afín no soportado");
+  const dim=SIZES[a>>6]&&SIZES[a>>6][s>>6];if(!dim)throw new Error("Forma OAM inválida");
+  const tile=u16(oam,i+4)&255,bank=oam[i+5]>>4;if(bank*16+15>=pal.length)throw new Error("Paleta OAM fuera de rango");
+  const x=s16(u16(oam,i+6)),y=s16(u16(oam,i+8));if(Math.abs(x)>240||Math.abs(y)>160)throw new Error("Posición OAM fuera de rango");
+  objects.push({w:dim[0],h:dim[1],tile,bank,x,y,hf:!!(s&0x10),vf:!!(s&0x20)});
+ }
+ if(!end||!objects.length)return null;
+ // Coordinates remain relative to the unit; use a stable origin for every frame.
+ const im=rgba(512,352);for(const o of objects.reverse())for(let y=0;y<o.h;y++)for(let x=0;x<o.w;x++){
+  const sx=o.hf?o.w-1-x:x,sy=o.vf?o.h-1-y:y,tile=o.tile+(sy>>3)*32+(sx>>3),k=tile*32+(sy&7)*4+((sx&7)>>1);
+  if(k>=gfx.length)continue;const v=gfx[k],n=sx&1?v>>4:v&15;if(n)pixel(im,256+o.x+x,176+o.y+y,pal[o.bank*16+n]);
+ }
+ return bounds(im)?im:null;
+};
+R.battleAnimation=function(ctx,id){
+ const rom=ctx.rom,t=R.graphicTables(ctx).battle;if(t<0||id<1||id>1024)return null;const a=t+(id-1)*32;if(!inRange(rom,a,32))return null;
+ const header=ptrAt(rom,a+12),script=lzAt(rom,ptrAt(rom,a+16),0x40000),oam=lzAt(rom,ptrAt(rom,a+24),0x40000),palRaw=lzAt(rom,ptrAt(rom,a+28),0x4000);
+ if(!inRange(rom,header,48)||!script||!oam||!palRaw||palRaw.length<32)return null;
+ const pal=palAt(palRaw,0,Math.min(64,palRaw.length/2)),modes={},frames=[],cache=new Map(),sheets=new Map(),errors=[];
+ const atMode=m=>u32(rom,header+(m-1)*4);
+ function track(m){
+  const start=atMode(m);if(start>=script.length||start%4)return null;let end=script.length;
+  for(let j=1;j<=12;j++){const p=atMode(j);if(p>start&&p<end)end=p;}
+  const steps=[];let impact=-1,ticks=0;
+  for(let p=start;p+4<=end;){const cmd=script[p+3];if(cmd===0x80)break;
+   if(cmd===0x85){if(impact<0&&[0x05,0x09,0x1A].includes(script[p]))impact=steps.length;p+=4;continue;}
+   if(cmd!==0x86){p+=4;continue;}
+   if(p+12>end)throw new Error("Fotograma truncado");// absolute ROM address, not script-relative
+   const addr=off(rom,u32(script,p+4)),oa=u32(script,p+8),key=addr+":"+oa,wait=Math.max(1,u16(script,p));
+   if(wait>1200||ticks+wait>1200)throw new Error("Duración fuera de rango");
+   let fi=cache.get(key);if(fi===undefined){if(frames.length>=256)throw new Error("Demasiados fotogramas");let gfx=sheets.get(addr);if(!gfx){gfx=lzAt(rom,addr,0x10000);sheets.set(addr,gfx);}const img=R.battleFrame(gfx,oam,oa,pal);if(!img)throw new Error("Fotograma vacío o ilegible");const b=bounds(img),trim=rgba(b.w,b.h);blit(trim,img,b.x,b.y,b.w,b.h,0,0);fi=frames.length;frames.push({image:trim,ox:256-b.x,oy:176-24-b.y});cache.set(key,fi);}
+   steps.push({frame:fi,ticks:wait});ticks+=wait;p+=12;
+  }
+  return steps.length?{steps,impact:impact<0?Math.floor(steps.length/2):Math.min(impact,steps.length-1),estimatedImpact:impact<0}:null;
+ }
+ // Keep normal/critical/ranged/idle/dodge/miss separate, with actual source frame durations.
+ for(const [key,m] of Object.entries({normal:1,critical:3,farNormal:5,farCritical:6,dodge:7,idle:9,farIdle:10,miss:12}))try{const tr=track(m);if(tr)modes[key]=tr;}catch(e){errors.push(key+": "+e.message);}
+ if(!Object.keys(modes).length)return null;
+ return {id,name:"FE8_Anim_"+id,frames,modes,errors};
+};
+// Build one atlas with fixed per-frame anchors. Do not duplicate missing animation modes.
+R.animationPack=function(anim,name,path){
+ const sizes=anim.frames.map(f=>({w:f.image.width,h:f.image.height})),shelf=D.shelf(sizes,2048);
+ if(shelf.height>8192||shelf.width*shelf.height>16000000)throw new Error("Atlas demasiado grande");
+ const im=rgba(shelf.width,shelf.height),rects=[];anim.frames.forEach((f,i)=>{const p=shelf.pos[i],w=f.image.width,h=f.image.height;blit(im,f.image,0,0,w,h,p.x,p.y);rects.push({x:p.x,y:p.y,w,h,ox:f.ox,oy:f.oy});});
+ const clips={},modeKeys={};for(const [mode,t] of Object.entries(anim.modes)){const frames=[];let impact=0;t.steps.forEach((s,i)=>{if(i===t.impact)impact=frames.length;for(let n=0;n<s.ticks;n++)frames.push([{atlas:name,rect:s.frame,x:0,y:0,zoom:1,angle:0,mirror:false,opacity:1,blend:0}]);});const key=({farNormal:name+"_far:normal",farCritical:name+"_far:critical",idle:name+"_idle:normal",farIdle:name+"_far_idle:normal",dodge:name+"_dodge:normal"})[mode]||name+":"+mode;modeKeys[mode]=key;clips[key]={fps:60,impact,frames};}
+ return {image:im,atlas:{path,rects},clips,modeKeys};
+};
+
 })(typeof globalThis!=="undefined"?globalThis:this);
