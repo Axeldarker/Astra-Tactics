@@ -390,6 +390,7 @@ src/editor/02_Database.js Base de datos: notas F9, filas nuevas de MZ, plantilla
 src/app/project.js       Acceso al proyecto (carpeta o HTTP), plugins.js, paquete de gráficos, copias de seguridad.
 src/app/tilemap.js       Dibujo del mapa con las reglas de Tilemap de MZ (las tablas se leen de rmmz_core.js).
 src/app/icons.js         Iconos pixel-art propios, IconSet, iconos del paquete, sprites recoloreados y retratos.
+src/app/toolicons.js     Iconos grandes (32×32) de la paleta de herramientas, dibujados por capas con contorno y sombreado.
 src/app/app.js           Interfaz: paleta, mapa, inspector, historial, teclado.
 src/app/anim.js          Reproductor de animaciones, importador (hoja PNG / FE Essentials / .zip) y sprites de mapa.
 src/app/database.js      Ventana Base de datos.

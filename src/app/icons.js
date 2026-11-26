@@ -45,8 +45,8 @@ Astra.PIXEL={
 const pixelCache={};
 Astra.pixel=function(name){
  if(pixelCache[name])return pixelCache[name];const rows=Astra.PIXEL[name];if(!rows)return null;
- const c=document.createElement("canvas");c.width=16;c.height=16;const x=c.getContext("2d");
- rows.forEach((r,y)=>r.split("").forEach((ch,i)=>{if(PAL[ch]){x.fillStyle=PAL[ch];x.fillRect(i,y,1,1);}}));
+ const pal=name.startsWith("big:")?Astra.PAL32:PAL,c=document.createElement("canvas");c.width=rows[0].length;c.height=rows.length;const x=c.getContext("2d");
+ rows.forEach((r,y)=>r.split("").forEach((ch,i)=>{if(pal[ch]){x.fillStyle=pal[ch];x.fillRect(i,y,1,1);}}));
  return pixelCache[name]=c;
 };
 Astra.pixelUrl=(name,size)=>{const src=Astra.pixel(name);if(!src)return "";const c=document.createElement("canvas");c.width=c.height=size||32;const x=c.getContext("2d");x.imageSmoothingEnabled=false;x.drawImage(src,0,0,c.width,c.height);return c.toDataURL();};
@@ -100,7 +100,7 @@ Astra.paintIcons=function(root){
   // Sprites de unidades: misma escala entera para todos, así un jinete se ve más grande que un soldado, como en el juego.
   const sprite=s=>{if(!s)return;x.clearRect(0,0,W,H);const k=Math.min(Math.max(1,Math.floor(W/24)),(W-2)/s.w,(H-2)/s.h),dw=s.w*k,dh=s.h*k;x.drawImage(s.im,s.sx,s.sy,s.w,s.h,(W-dw)/2,H-1-dh,dw,dh);};
   try{
-   if(c.dataset.pix){const im=Astra.pixel(c.dataset.pix);if(im)fit(im,0,0,16,16);return;}
+   if(c.dataset.pix){const im=Astra.pixel(c.dataset.pix);if(im)fit(im,0,0,im.width,im.height);return;}
    if(c.dataset.item){const [kind,id]=c.dataset.item.split(":"),a=Astra.itemIcon(p,kind,Number(id));if(!a)return;
     if(a.iconIndex!==undefined)return drawIconSet(p,x,a.iconIndex,W,H);const im=await iconImage(p,a);if(im)fit(im,a.rect[0],a.rect[1],a.rect[2],a.rect[3]);return;}
    if(c.dataset.iconset!==undefined)return drawIconSet(p,x,Number(c.dataset.iconset),W,H);

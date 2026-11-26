@@ -142,7 +142,7 @@ function renderTop(){
 }
 function renderPalette(){
  $("palette").innerHTML=TOOL_ORDER.map((k,i)=>{const t=TOOLS[k];
-  return `<button class="tool${S.tool===k?" on":""}" data-tool="${k}" title="${esc(t.hint)}">${Astra.PIXEL[k]?`<span class="ico pix"><img src="${Astra.pixelUrl(k,32)}" alt=""></span>`:`<span class="ico" style="background:${t.color}">${esc(t.letter)}</span>`}<span class="lbl">${esc(PALETTE_LABELS[k]||t.label)}</span>${i<10?`<kbd>${(i+1)%10}</kbd>`:""}</button>`+(PALETTE_BREAKS.has(k)?`<div class="tool-sep"><i>◆</i></div>`:"");}).join("");
+  return `<button class="tool${S.tool===k?" on":""}" data-tool="${k}" title="${esc(t.hint)}">${Astra.PIXEL["big:"+k]||Astra.PIXEL[k]?`<span class="ico pix"><img src="${Astra.pixelUrl(Astra.PIXEL["big:"+k]?"big:"+k:k,64)}" alt=""></span>`:`<span class="ico" style="background:${t.color}">${esc(t.letter)}</span>`}<span class="lbl">${esc(PALETTE_LABELS[k]||t.label)}</span>${i<10?`<kbd>${(i+1)%10}</kbd>`:""}</button>`+(PALETTE_BREAKS.has(k)?`<div class="tool-sep"><i>◆</i></div>`:"");}).join("");
  $("statusHint").textContent=TOOLS[S.tool].hint;
 }
 function setTool(k){S.tool=k;if(k==="terrain")S.view.terrain=true;if(k==="ally"||k==="enemy")S.panel="units";renderAll();}
@@ -334,7 +334,7 @@ function drawHero(){
  const sp=m&&(m.kind==="enemy"||m.kind==="ally")?spriteFor(m,e):null,color=m?m.color:"#d2b567";
  ctx.fillStyle=color+"33";ctx.beginPath();ctx.arc(36,36,32,0,Math.PI*2);ctx.fill();
  if(sp){const s=Math.min(64/sp.w,64/sp.h);ctx.drawImage(sp.im,sp.sx,sp.sy,sp.w,sp.h,36-sp.w*s/2,36-sp.h*s/2,sp.w*s,sp.h*s);}
- else if(m&&Astra.pixel(m.kind))ctx.drawImage(Astra.pixel(m.kind),8,8,56,56);
+ else if(m&&Astra.pixel(m.kind)){const big=Astra.pixel("big:"+m.kind);if(big)ctx.drawImage(big,4,4,64,64);else ctx.drawImage(Astra.pixel(m.kind),8,8,56,56);}
  else{ctx.fillStyle=color;ctx.font="bold 30px sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(m?m.letter:"⚑",36,38);}
 }
 
