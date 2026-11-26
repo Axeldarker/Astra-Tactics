@@ -298,6 +298,8 @@ La forma más cómoda: **📥 Importar → 🌐 Explorar la galería de FE Essen
 - Pestañas **🎞 Animaciones**, **🧍 Sprites de mapa**, **🙂 Retratos** y **⚔ Iconos**, con las mismas categorías que feessentials.com y un buscador.
 - Cada tarjeta enseña la vista previa (las animaciones, en movimiento) y sus armas. Elige el arma y pulsa **📥 Importar**: Astra descarga los archivos y abre el importador ya relleno.
 - Si abriste la galería desde una clase, un personaje o un arma, lo que importes se asigna directamente a esa clase, personaje o arma.
+- Las armas de cada animación salen como **iconos** (espada, lanza, hacha, arco, tomo, bastón…), como en FE Essentials. Pasa el ratón por encima para ver el nombre y haz clic para cambiar la vista previa.
+- **🔍 Similares** busca el mismo personaje en todo el repositorio: desde un retrato de Lucina ves sus otros retratos y sus animaciones de batalla, si existen (y al revés). Puedes cambiar el nombre buscado. La primera vez revisa los nombres de todas las categorías (unas 25 consultas a GitHub) y los guarda 7 días.
 - **📋** copia los créditos del recurso. Además, Astra apunta en el paquete de gráficos (`credits`) el nombre, el autor y el enlace de todo lo que importas desde la galería, para que no se te olvide nadie en los créditos del juego.
 
 feessentials.com muestra los recursos del [FE Repo](https://github.com/Klokinator/FE-Repo) de GitHub, y la galería lee ese mismo repositorio. Necesita internet. GitHub permite **60 consultas por hora** sin cuenta: Astra gasta una por sección y otra por categoría que abres, y las guarda 12 horas, así que es difícil llegar al límite. Si llegas, te dice a qué hora puedes volver.
