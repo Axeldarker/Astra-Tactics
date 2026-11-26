@@ -6,7 +6,10 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s===undefined||s===null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
 const OBJECTIVES={eliminate:"Eliminar enemigos",boss:"Derrotar jefes",seize:"Conquistar",survive:"Sobrevivir",manual:"Comando de finalizar"};
 const STAT_LABELS={health:"PV",power:"Fue",magic:"Mag",skill:"Hab",speed:"Vel",luck:"Sue",defense:"Def",resistance:"Res",move:"Mov",build:"Con"};
-const TOOL_ORDER=["select","enemy","ally","chest","door","village","shop","goal","deploy","terrain","erase"];
+const TOOL_ORDER=["select","ally","enemy","chest","door","village","shop","goal","deploy","terrain","erase"];
+// Nombres de la paleta (en plural, como grupos) y separadores después de estas herramientas.
+const PALETTE_LABELS={ally:"Aliados",enemy:"Enemigos",chest:"Cofres",door:"Puertas",village:"Aldeas",shop:"Tiendas",goal:"Conquista",deploy:"Despliegue"};
+const PALETTE_BREAKS=new Set(["enemy","shop","deploy","terrain"]);
 const TOOLS=Object.assign({select:{label:"Elegir",letter:"↖",color:"#93aaad",hint:"Clic para elegir · arrastra para mover"},
  terrain:{label:"Terreno",letter:"▦",color:"#8fdcaa",hint:"Clic o arrastra para pintar el terreno elegido a la derecha"},
  erase:{label:"Borrar",letter:"✕",color:"#e8797c",hint:"Clic en algo colocado para borrarlo"}},
@@ -44,7 +47,7 @@ async function open(backend){
  const p=await Astra.loadProject(backend);S.project=p;M.db={actors:p.actors,classes:p.classes,weapons:p.weapons,items:p.items};
  $("welcome").classList.add("hidden");$("welcomeError").textContent="";
  const maps=(p.mapInfos||[]).filter(Boolean).sort((a,b)=>a.order-b.order);
- $("mapSelect").innerHTML=maps.map(m=>`<option value="${m.id}">${m.id} · ${esc(m.name)}</option>`).join("");
+ $("mapSelect").innerHTML=maps.map(m=>`<option value="${m.id}">${esc(String(m.name||"Mapa "+m.id).replace(/^\s*\d+\s*[·.:-]\s*/,""))}</option>`).join("");
  $("statusProject").textContent="📁 "+p.title;
  const saved=Number(localStorage.getItem("astra.map."+p.name));
  await loadMap(maps.some(m=>m.id===saved)?saved:maps[0]?maps[0].id:1);
@@ -77,9 +80,11 @@ async function loadMap(id){
  S.tileset=await Astra.loadTileset(p,S.map.tilesetId);
  const packMap=p.pack&&p.pack.maps&&p.pack.maps[id];S.packImage=packMap?await Astra.image(p,packMap.path):null;
  if(!S.packImage&&S.view.bg==="game")S.view.bg="tiles";else if(S.packImage)S.view.bg="game";
- S.zoom=Math.min(1.5,Math.max(.5,Math.floor(Math.min(($("viewport").clientWidth-80)/(S.map.width*p.tileSize),($("viewport").clientHeight-120)/(S.map.height*p.tileSize))*4)/4||1));
+ S.zoom=fitZoom(1.5);
  drawBase();renderAll();
 }
+// Zoom para que el mapa quepa en la pantalla (en pasos de 25 %).
+function fitZoom(maxZ){const p=S.project,v=$("viewport");return Math.min(maxZ||4,Math.max(.25,Math.floor(Math.min((v.clientWidth-24)/(S.map.width*p.tileSize),(v.clientHeight-24)/(S.map.height*p.tileSize))*20)/20||1));}
 function drawBase(){
  const p=S.project,tw=p.tileSize,W=S.map.width*tw,H=S.map.height*tw,c=$("base");c.width=W;c.height=H;$("overlay").width=W;$("overlay").height=H;
  const ctx=c.getContext("2d");ctx.imageSmoothingEnabled=false;ctx.fillStyle="#10222a";ctx.fillRect(0,0,W,H);
@@ -88,7 +93,7 @@ function drawBase(){
  if(S.view.bg==="game"&&S.packImage){const cell=(p.pack.maps[S.mapId]||{}).cell||16;ctx.drawImage(S.packImage,0,0,S.map.width*cell,S.map.height*cell,0,0,W,H);}
  applyZoom();
 }
-function applyZoom(){const st=$("stage"),c=$("base");st.style.width=c.width+"px";st.style.height=c.height+"px";st.style.transform=`scale(${S.zoom})`;st.style.marginRight=st.style.marginBottom=(40+c.width*(S.zoom-1))+"px";$("statusZoom").textContent="🔍 "+Math.round(S.zoom*100)+"%";}
+function applyZoom(){const st=$("stage"),c=$("base");st.style.width=c.width+"px";st.style.height=c.height+"px";st.style.transform=`scale(${S.zoom})`;const v=$("viewport"),mx=Math.max(10,(v.clientWidth-c.width*S.zoom)/2),my=Math.max(10,(v.clientHeight-c.height*S.zoom)/2);st.style.margin=my+"px "+(mx+c.width*(S.zoom-1))+"px "+(my+c.height*(S.zoom-1))+"px "+mx+"px";$("statusZoom").textContent="";$("zoomPct").textContent=Math.round(S.zoom*100)+"%";}
 
 // ---------- historial ----------
 function edit(fn){S.undo.push(JSON.stringify(S.map));if(S.undo.length>150)S.undo.shift();S.redo=[];const r=fn();S.dirty=true;afterEdit();return r;}
@@ -107,51 +112,89 @@ async function save(){
  catch(e){modal(`<h2>No se pudo guardar</h2><p class="error">${esc(e.message)}</p>`,[{label:"Vale",value:0}]);}
 }
 
+// ▶ Probar misión: el navegador no puede abrir MZ, así que guarda, revisa y explica el último paso.
+async function playtest(){
+ if(!S.map)return;if(S.dirty){await save();if(S.dirty)return;}
+ const c=S.check||M.check(S.map,S.mapId),name=(($("mapSelect").selectedOptions||[])[0]||{}).text||"";
+ modal(`<h2>▶ Probar misión</h2>${c.ok?`<p>✔ <b>${esc(name)}</b> está guardado y la misión está lista${c.warnings.length?` (con ${c.warnings.length} aviso${c.warnings.length===1?"":"s"})`:""}.</p>`:`<p class="error">✖ Antes de probar, arregla esto: ${esc(c.error)}</p>`}
+  ${c.warnings.map(w=>`<p class="help">⚠ ${esc(w)}</p>`).join("")}
+  <ol class="steps2"><li>Abre el proyecto en <b>RPG Maker MZ</b>. Si ya estaba abierto, vuelve a abrirlo <b>sin guardar</b> (Archivo → Abrir proyecto), o MZ pisará lo que guardó Astra.</li>
+  <li>Pulsa <b>▶ Reproducir prueba</b> (Ctrl+R) y entra en este mapa: la misión empieza sola.</li></ol>
+  <p class="help">Astra funciona en el navegador y no puede abrir MZ por ti; por eso deja todo guardado y revisado.</p>`,[{label:"Entendido",value:0,cls:"gold"}]);
+}
+
 // ---------- render general ----------
 function renderAll(){if(!S.map)return;S.check=M.check(S.map,S.mapId);renderTop();renderPalette();renderInspector();drawOverlay();}
 function renderTop(){
  $("undoBtn").disabled=!S.undo.length;$("redoBtn").disabled=!S.redo.length;
- $("saveBtn").innerHTML=S.dirty?"💾 Guardar <b>●</b>":"💾 Guardado";$("saveBtn").classList.toggle("gold",S.dirty);
+ $("saveBtn").classList.toggle("gold",S.dirty);
+ const st=$("saveState");st.textContent=S.dirty?"● Sin guardar":"✔ Guardado";st.classList.toggle("dirty",S.dirty);
+ const maps=$("mapSelect"),idx=[...maps.options].findIndex(o=>Number(o.value)===S.mapId);$("chapNo").textContent=String(idx+1).padStart(2,"0");
  const c=S.check,l=$("light");
- if(!c)return;
- l.className="light "+(!c.ok?"bad":c.warnings.length?"warn":"ok");
- l.querySelector("span").textContent=!c.ok?c.error:`${OBJECTIVES[c.summary.objective]||c.summary.objective} · ${c.summary.allies} aliados · ${c.summary.foes} enemigos${c.summary.reinforcements?" · "+c.summary.reinforcements+" refuerzos":""}${c.warnings.length?" · ⚠ "+c.warnings.length:""}`;
+ if(c){
+  l.className="light "+(!c.ok?"bad":c.warnings.length?"warn":"ok");
+  const sm=c.summary,pix=k=>`<img src="${Astra.pixelUrl(k,32)}" alt="">`;
+  l.querySelector("span").innerHTML=!c.ok?`<em class="err">✖ ${esc(c.error)}</em>`
+   :`<b class="chip">${pix("goal")} ${esc(OBJECTIVES[sm.objective]||sm.objective)}</b><b class="chip ally">${pix("ally")} ${sm.allies} aliado${sm.allies===1?"":"s"}</b><b class="chip foe">${pix("enemy")} ${sm.foes} enemigo${sm.foes===1?"":"s"}</b>${sm.reinforcements?`<b class="chip gold">${pix("deploy")} ${sm.reinforcements} refuerzo${sm.reinforcements===1?"":"s"}</b>`:""}${c.warnings.length?`<b class="chip warn">⚠ ${c.warnings.length} aviso${c.warnings.length===1?"":"s"}</b>`:""}`;
+ }
  document.querySelectorAll("#viewbar [data-view]").forEach(b=>{b.classList.toggle("on",S.view.bg===b.dataset.view);b.classList.toggle("hidden",b.dataset.view==="game"&&!S.packImage);});
  document.querySelectorAll("#viewbar [data-toggle]").forEach(b=>b.classList.toggle("on",!!S.view[b.dataset.toggle]));
 }
 function renderPalette(){
- $("palette").innerHTML=TOOL_ORDER.map((k,i)=>{const t=TOOLS[k];return (k==="terrain"?`<div class="tool-sep"></div>`:"")+`<button class="tool${S.tool===k?" on":""}" data-tool="${k}" title="${esc(t.hint)}"><kbd>${i<10?(i+1)%10:""}</kbd>${Astra.PIXEL[k]?`<span class="ico pix" style="--c:${t.color}"><img src="${Astra.pixelUrl(k,32)}" alt=""></span>`:`<span class="ico" style="background:${t.color}">${esc(t.letter)}</span>`}${esc(t.label)}</button>`;}).join("");
+ $("palette").innerHTML=TOOL_ORDER.map((k,i)=>{const t=TOOLS[k];
+  return `<button class="tool${S.tool===k?" on":""}" data-tool="${k}" title="${esc(t.hint)}">${Astra.PIXEL[k]?`<span class="ico pix"><img src="${Astra.pixelUrl(k,32)}" alt=""></span>`:`<span class="ico" style="background:${t.color}">${esc(t.letter)}</span>`}<span class="lbl">${esc(PALETTE_LABELS[k]||t.label)}</span>${i<10?`<kbd>${(i+1)%10}</kbd>`:""}</button>`+(PALETTE_BREAKS.has(k)?`<div class="tool-sep"><i>◆</i></div>`:"");}).join("");
  $("statusHint").textContent=TOOLS[S.tool].hint;
 }
-function setTool(k){S.tool=k;if(k==="terrain")S.view.terrain=true;renderAll();}
+function setTool(k){S.tool=k;if(k==="terrain")S.view.terrain=true;if(k==="ally"||k==="enemy")S.panel="units";renderAll();}
 
 // ---------- inspector ----------
+// Dos pestañas: «Unidades» (desplegar y la unidad elegida) y «Propiedades» (todo lo editable de lo elegido).
+function panelFor(e){const unit=e&&["enemy","ally"].indexOf(M.kind(e))>=0;if(S.tool==="terrain"||(e&&!unit))return "props";return S.panel||"units";}
 function renderInspector(){
  const body=$("inspectorBody"),p=S.project;let html="";
  if(p.pluginStatus.legacy||p.pluginStatus.missing)html+=`<div class="banner warn">⚠ ${p.pluginStatus.missing?"Falta TacticsMZ en este proyecto.":"Proyecto con TacticsMZ 0.2."} <button class="btn small" data-act="upgrade">Actualizar</button></div>`;
  p.warnings.forEach(w=>html+=`<div class="banner info">ℹ ${esc(w)}</div>`);
- if(S.tool==="terrain")html+=terrainHtml();
- const e=S.map.events[S.selected];
- // Con la herramienta Enemigo/Aliado, las unidades de la base de datos siempre están arriba para seguir colocando.
- const roster=S.tool==="enemy"||S.tool==="ally"||(S.tool==="select"&&!e);
- if(roster)html+=rosterHtml();
- if(e)html+=selectionHtml(e);else if(S.tool!=="terrain")html+=emptyHtml();
- if(S.check&&(!S.check.ok||S.check.warnings.length))html+=`<div class="card"><h3>Revisión de la misión</h3>${!S.check.ok?`<p class="error">✖ ${esc(S.check.error)}</p>`:""}${S.check.warnings.map(w=>`<p class="help">⚠ ${esc(w)}</p>`).join("")}</div>`;
+ const e=S.map.events[S.selected],panel=panelFor(e);
+ document.querySelectorAll("#ptabs [data-panel]").forEach(b=>b.classList.toggle("on",b.dataset.panel===panel));
+ if(panel==="units"){html+=rosterHtml();if(e)html+=selectedUnitHtml(e);}
+ else{
+  if(S.tool==="terrain")html+=terrainHtml();
+  if(e)html+=selectionHtml(e);else if(S.tool!=="terrain")html+=emptyHtml();
+  if(S.check&&(!S.check.ok||S.check.warnings.length))html+=`<div class="card"><h3>Revisión de la misión</h3>${!S.check.ok?`<p class="error">✖ ${esc(S.check.error)}</p>`:""}${S.check.warnings.map(w=>`<p class="help">⚠ ${esc(w)}</p>`).join("")}</div>`;
+ }
  body.innerHTML=html;drawHero();Astra.paintIcons(body);
+}
+// Resumen de la unidad elegida (como en la batalla): retrato, clase, nivel, PV y arma.
+function selectedUnitHtml(e){
+ const c=M.find(e,"Ally")||M.find(e,"Enemy")||M.find(e,"Unit"),u=previewUnit(e),eng=S.preview&&S.preview.engine,p=S.project;
+ const ally=M.kind(e)==="ally",actorId=c&&Number(c.args.actorId)||0,m=M.markers(S.map).find(x=>x.id===e.id)||{};
+ const name=u&&u.name||(actorId&&(p.actors[actorId]||{}).name)||M.describe(e),cls=names(p.classes,u?u.classId:c&&c.args.classId),lv=u?u.level:c&&c.args.level||1;
+ const hp=u?u.hp:0,max=u&&eng?eng.value(u,"health"):0,item=u&&u.inventory[u.equipped],w=item&&eng?eng.itemData(item):null;
+ const portrait=ally&&actorId?`<canvas class="selport" width="96" height="96" data-actor="${actorId}"></canvas>`:`<canvas class="selport" id="heroCanvas" width="96" height="96"></canvas>`;
+ return `<div class="selcard"><div class="ribbon">UNIDAD SELECCIONADA</div><div class="selbody">${portrait}<div class="selinfo">
+  <b class="selname">${esc(name)}</b><span class="selsub">${esc(cls)} · Nv. ${esc(lv)}</span>
+  <span class="selteam ${ally?"ally":"foe"}"><img src="${Astra.pixelUrl(ally?"ally":"enemy",32)}" alt="">${ally?(m.lord?"Aliado · Líder":"Aliado"):(m.boss?"Enemigo · Jefe":"Enemigo")}</span>
+  ${max?`<span class="selhp"><b>PV</b> ${hp} / ${max}<i><em style="width:${Math.round(Math.min(1,hp/max)*100)}%"></em></i></span>`:""}
+  ${w?`<span class="selweapon">${item.kind==="weapon"||item.kind==="item"?`<canvas width="20" height="20" data-item="${item.kind}:${item.id}"></canvas>`:""}${esc(w.name)}</span>`:""}
+ </div></div><button class="btn wide edit" data-panel="props">✎ Editar propiedades</button></div>`;
 }
 // Unidades de la base de datos para colocar: clic para elegir (y luego clic en el mapa) o arrastrar al mapa.
 function rosterHtml(){
  const p=S.project,kind=S.tool==="enemy"||S.tool==="ally"?S.tool:(S.rosterTab||"ally"),last=S.last[kind]||{};
  const placed=new Set(S.map.events.filter(Boolean).map(e=>M.find(e,"Ally")).filter(Boolean).map(c=>Number(c.args.actorId)));
- const card=(pick,canvas,name,sub,on,extra)=>`<button class="ucard${on?" on":""}" draggable="true" data-pick="${esc(pick)}" title="Clic: elegir y luego clic en el mapa · Arrastrar: colocar">${canvas}<b>${esc(name)}</b><small>${esc(sub)}</small>${extra||""}</button>`;
- let cards="";
- if(kind==="ally")cards=(p.actors||[]).filter(a=>a&&a.name).map(a=>card("ally:"+a.id,`<canvas width="48" height="48" data-actor="${a.id}"></canvas>`,a.name,names(p.classes,a.classId)+" · Nv "+(a.initialLevel||1),Number(last.actorId)===a.id,placed.has(a.id)?`<i>en el mapa</i>`:"")).join("");
+ const q=(S.rosterFind||"").trim().toLowerCase(),hide=n=>q&&n.toLowerCase().indexOf(q)<0;
+ const row=(pick,canvas,name,sub,on,extra)=>`<button class="urow${on?" on":""}${hide(name+" "+sub)?" hidden":""}" draggable="true" data-pick="${esc(pick)}" data-find="${esc((name+" "+sub).toLowerCase())}" title="Clic: elegir y luego clic en el mapa · Arrastrar: colocar">${canvas}<span class="ut"><b>${esc(name)}</b><small>${esc(sub)}</small></span>${extra||""}<em>▶</em></button>`;
+ let rows="";
+ if(kind==="ally")rows=(p.actors||[]).filter(a=>a&&a.name).map(a=>row("ally:"+a.id,`<canvas width="40" height="40" data-actor="${a.id}"></canvas>`,a.name,names(p.classes,a.classId)+" · Nv. "+(a.initialLevel||1),Number(last.actorId)===a.id,placed.has(a.id)?`<i>en el mapa</i>`:"")).join("");
  else{const pres=Object.values(T.enemyPresets);
-  cards=(pres.length?`<div class="ugroup">Enemigos rápidos</div>`+pres.map(x=>card("preset:"+x.name,`<canvas width="48" height="48" data-class="${Number(x.classId)||0}" data-team="2"></canvas>`,x.name,names(p.classes,x.classId)+" · Nv "+(x.level||1),last.preset===x.name)).join(""):"")
-   +`<div class="ugroup">Clases</div>`+(p.classes||[]).filter(c=>c&&c.name).map(c=>card("class:"+c.id,`<canvas width="48" height="48" data-class="${c.id}" data-team="2"></canvas>`,c.name,"Nv "+(S.rosterLevel||1),!last.preset&&Number(last.classId)===c.id)).join("");}
- return `<div class="card roster"><h3>${kind==="ally"?"🧑 Personajes para desplegar":"👾 Enemigos para colocar"}</h3>
-  <div class="tabs"><button data-roster="ally" class="${kind==="ally"?"on":""}">Aliados</button><button data-roster="enemy" class="${kind==="enemy"?"on":""}">Enemigos</button>${kind==="enemy"?`<span class="grow"></span><label class="lvl">Nivel <input type="number" min="1" id="rosterLevel" value="${S.rosterLevel||1}"></label>`:""}</div>
-  <p class="help">Clic en uno y luego clic en el mapa, o <b>arrástralo</b> a la casilla. Se edita en 📚 Base de datos.</p><div class="ugrid">${cards||`<p class="help">No hay nada en la base de datos.</p>`}</div></div>`;
+  rows=(pres.length?`<div class="ugroup">Enemigos rápidos</div>`+pres.map(x=>row("preset:"+x.name,`<canvas width="40" height="40" data-class="${Number(x.classId)||0}" data-team="2"></canvas>`,x.name,names(p.classes,x.classId)+" · Nv. "+(x.level||1),last.preset===x.name)).join(""):"")
+   +`<div class="ugroup">Clases</div>`+(p.classes||[]).filter(c=>c&&c.name).map(c=>row("class:"+c.id,`<canvas width="40" height="40" data-class="${c.id}" data-team="2"></canvas>`,c.name,"Nv. "+(S.rosterLevel||1),!last.preset&&Number(last.classId)===c.id)).join("");}
+ return `<div class="roster"><h4 class="orn">◆ DESPLEGAR UNIDADES ◆</h4>
+  <label class="usearch"><span>🔍</span><input id="rosterFind" type="search" placeholder="Buscar unidad…" value="${esc(S.rosterFind||"")}"></label>
+  <div class="useg"><button data-roster="ally" class="${kind==="ally"?"on":""}">Aliados</button><button data-roster="enemy" class="${kind==="enemy"?"on":""}">Enemigos</button></div>
+  ${kind==="enemy"?`<label class="lvl">Nivel de las clases <input type="number" min="1" id="rosterLevel" value="${S.rosterLevel||1}"></label>`:""}
+  <div class="ulist">${rows||`<p class="help">No hay nada en la base de datos.</p>`}</div>
+  <p class="orn small">◆ Arrastra una unidad al mapa ◆</p></div>`;
 }
 function pickArgs(pick){const i=pick.indexOf(":"),k=pick.slice(0,i),v=pick.slice(i+1);
  if(k==="ally")return {kind:"ally",args:{actorId:Number(v),lord:!M.markers(S.map).some(m=>m.lord)}};
@@ -162,7 +205,7 @@ function emptyHtml(){
   <li>Elige <b>Aliado</b> en la paleta y haz clic en el mapa. Marca <i>Es el líder</i>.</li>
   <li>Elige <b>Enemigo</b> y haz clic donde quieras enemigos. Cada uno copia los ajustes del anterior.</li>
   <li>Añade <b>Cofres</b>, <b>Aldeas</b> o una casilla de <b>Conquista</b> si te apetece.</li>
-  <li>Mira el semáforo de arriba: en verde, la misión está lista. <b>Guarda</b> y pruébala en MZ.</li></ol>
+  <li>Mira el resumen de la misión arriba: si no sale nada en rojo, está lista. Pulsa <b>▶ Probar misión</b>.</li></ol>
   <p class="help">Haz clic en cualquier cosa colocada para cambiarla. Arrástrala para moverla.</p></div>
   <div class="card"><h3>Atajos</h3><div class="keys"><kbd>1-0</kbd><span>Herramientas</span><kbd>Ctrl+Z / Ctrl+Y</kbd><span>Deshacer / rehacer</span><kbd>Ctrl+S</kbd><span>Guardar</span><kbd>Supr</kbd><span>Borrar lo elegido</span><kbd>T / G</kbd><span>Ver terreno / cuadrícula</span><kbd>+ / −</kbd><span>Zoom (o Ctrl + rueda)</span><kbd>Esc</kbd><span>Soltar selección</span><kbd>Clic derecho</kbd><span>Volver a Elegir</span></div></div>`;
 }
@@ -279,7 +322,8 @@ function drawOverlay(){
   if(m.badge)tag("⏱"+m.badge,x+2,y+11,"#f3d79b","left");
   if(m.boss)tag("♛",x+tw-3,y+12,"#ff9b9e","right");else if(m.lord)tag("♛",x+tw-3,y+12,"#8fe0f5","right");
   if(m.recruit)tag("💬",x+2,y+tw-3,"#8fdcaa","left");
-  if(selected){ctx.strokeStyle="#fff";ctx.lineWidth=2;ctx.strokeRect(x+1,y+1,tw-2,tw-2);ctx.strokeStyle=TOOLS.select.color;}
+  if(selected){const k=tw*.3;ctx.strokeStyle="#ffd45e";ctx.lineWidth=3;ctx.shadowColor="#000";ctx.shadowBlur=3;ctx.beginPath();
+   [[x+2,y+2,1,1],[x+tw-2,y+2,-1,1],[x+2,y+tw-2,1,-1],[x+tw-2,y+tw-2,-1,-1]].forEach(([px,py,dx,dy])=>{ctx.moveTo(px,py+dy*k);ctx.lineTo(px,py);ctx.lineTo(px+dx*k,py);});ctx.stroke();ctx.shadowBlur=0;}
   ctx.globalAlpha=1;
  });
  if(S.hover){ctx.strokeStyle="#f3d79b";ctx.lineWidth=2;ctx.strokeRect(S.hover.x*tw+1,S.hover.y*tw+1,tw-2,tw-2);}
@@ -299,7 +343,7 @@ function tileFromEvent(ev){const r=$("overlay").getBoundingClientRect(),tw=S.pro
 const tactical=e=>e&&M.kind(e)&&M.kind(e)!=="mission";
 function onDown(ev){
  if(!S.map)return;if(ev.button===2){setTool("select");S.selected=0;renderAll();return;}
- if(ev.button===1){S.pan={x:ev.clientX,y:ev.clientY,sx:$("viewport").scrollLeft,sy:$("viewport").scrollTop};ev.preventDefault();return;}
+ if(ev.button===1||(ev.button===0&&S.space)){S.pan={x:ev.clientX,y:ev.clientY,sx:$("viewport").scrollLeft,sy:$("viewport").scrollTop};ev.preventDefault();return;}
  const t=tileFromEvent(ev);if(!t)return;const there=M.eventAt(S.map,t.x,t.y);
  if(S.duplicate){const src=S.map.events[S.duplicate];S.duplicate=null;if(src&&!tactical(there)){edit(()=>{const copy=T.copy(src);copy.id=M.nextId(S.map);copy.x=t.x;copy.y=t.y;S.map.events[copy.id]=copy;S.selected=copy.id;});toast("⧉ Duplicado");}return;}
  if(S.tool==="terrain"){S.undo.push(JSON.stringify(S.map));S.redo=[];S.painting=true;paint(t);return;}
@@ -335,7 +379,8 @@ function onUp(){
 
 // ---------- panel: clics y cambios ----------
 function onInspectorClick(ev){
- const t=ev.target.closest("[data-act],[data-add],[data-remove],[data-brush],[data-pick],[data-roster]");if(!t)return;const e=S.map.events[S.selected];
+ const t=ev.target.closest("[data-act],[data-add],[data-remove],[data-brush],[data-pick],[data-roster],[data-panel]");if(!t)return;const e=S.map.events[S.selected];
+ if(t.dataset.panel){S.panel=t.dataset.panel;renderInspector();return;}
  if(t.dataset.roster){S.rosterTab=t.dataset.roster;S.tool=t.dataset.roster;renderAll();return;}
  if(t.dataset.pick){const r=pickArgs(t.dataset.pick);S.last[r.kind]=r.args;S.tool=r.kind;renderAll();toast("Ahora haz clic en el mapa para colocarlo");return;}
  if(t.dataset.brush){S.brush=Number(t.dataset.brush);renderInspector();return;}
@@ -369,9 +414,11 @@ function onKey(ev){
  if(k==="Escape"){S.selected=0;S.duplicate=null;renderAll();return;}
  if(k==="t"||k==="T"){S.view.terrain=!S.view.terrain;renderTop();drawOverlay();return;}
  if(k==="g"||k==="G"){S.view.grid=!S.view.grid;renderTop();drawOverlay();return;}
+ if(k===" "){ev.preventDefault();if(!S.space){S.space=true;$("overlay").style.cursor="grab";}return;}
  if(k==="+"||k==="="){zoom(1);return;}if(k==="-"){zoom(-1);return;}
 }
-function zoom(d){S.zoom=Math.max(.25,Math.min(4,S.zoom*(d>0?1.25:.8)));applyZoom();}
+function zoom(d){S.zoom=Math.max(.25,Math.min(4,Math.round(S.zoom*(d>0?1.25:.8)*20)/20));applyZoom();}
+window.addEventListener("resize",()=>{if(S.map)applyZoom();});
 
 // ---------- arranque ----------
 function boot(){
@@ -379,7 +426,8 @@ function boot(){
  $("viewbar").addEventListener("click",ev=>{const b=ev.target.closest("button");if(!b||!S.map)return;
   if(b.dataset.view){S.view.bg=b.dataset.view;drawBase();renderTop();}
   if(b.dataset.toggle){S.view[b.dataset.toggle]=!S.view[b.dataset.toggle];renderTop();drawOverlay();}
-  if(b.dataset.zoom)zoom(Number(b.dataset.zoom));});
+  if(b.dataset.zoom)zoom(Number(b.dataset.zoom));
+  if(b.dataset.fit){S.zoom=fitZoom();applyZoom();}});
  const ov=$("overlay");ov.addEventListener("mousedown",onDown);window.addEventListener("mousemove",onMove);window.addEventListener("mouseup",onUp);
  ov.addEventListener("contextmenu",e=>e.preventDefault());ov.addEventListener("mouseleave",()=>{S.hover=null;$("tooltip").classList.add("hidden");if(S.map)drawOverlay();});
  $("viewport").addEventListener("wheel",ev=>{if(ev.ctrlKey&&S.map){ev.preventDefault();zoom(ev.deltaY<0?1:-1);}},{passive:false});
@@ -388,6 +436,10 @@ function boot(){
  ov.addEventListener("drop",ev=>{const pick=ev.dataTransfer.getData("text/astra");if(!pick||!S.map)return;ev.preventDefault();const t=tileFromEvent(ev);if(!t)return;
   const there=M.eventAt(S.map,t.x,t.y);if(tactical(there)){toast("Esa casilla ya está ocupada");return;}
   const r=pickArgs(pick);S.last[r.kind]=T.copy(r.args);edit(()=>{const e=M.create(S.map,r.kind,t.x,t.y,r.args);S.selected=e.id;});toast("✔ Colocado");});
+ $("ptabs").addEventListener("click",ev=>{const b=ev.target.closest("[data-panel]");if(b&&S.map){S.panel=b.dataset.panel;if(b.dataset.panel==="units"&&S.tool==="terrain")S.tool="select";renderAll();}});
+ $("inspectorBody").addEventListener("input",ev=>{if(ev.target.id!=="rosterFind")return;S.rosterFind=ev.target.value;const q=S.rosterFind.trim().toLowerCase();
+  $("inspectorBody").querySelectorAll(".urow").forEach(r=>r.classList.toggle("hidden",!!q&&r.dataset.find.indexOf(q)<0));});
+ $("playBtn").onclick=playtest;
  $("inspectorBody").addEventListener("click",onInspectorClick);$("inspectorBody").addEventListener("change",onInspectorChange);
  $("mapSelect").addEventListener("change",ev=>loadMap(Number(ev.target.value)));
  $("undoBtn").onclick=undo;$("redoBtn").onclick=redo;$("saveBtn").onclick=save;
@@ -395,6 +447,7 @@ function boot(){
  $("light").onclick=()=>{if(S.check)modal(`<h2>Revisión de la misión</h2>${S.check.ok?`<p>✔ La misión compila correctamente con TacticsMZ.</p><p class="help">Título: <b>${esc(S.check.summary.title)}</b> · Victoria: <b>${esc(OBJECTIVES[S.check.summary.objective]||S.check.summary.objective)}</b><br>${S.check.summary.allies} aliados · ${S.check.summary.foes} enemigos · ${S.check.summary.reinforcements} refuerzos · ${S.check.summary.interactions} cofres/puertas/aldeas/tiendas · ${S.check.summary.goals} casillas de conquista</p>`:`<p class="error">✖ ${esc(S.check.error)}</p>`}${S.check.warnings.map(w=>`<p>⚠ ${esc(w)}</p>`).join("")}`,[{label:"Cerrar",value:0}]);};
  $("helpBtn").onclick=()=>modal(`<h2>Ayuda rápida</h2><p>Elige una herramienta a la izquierda y haz clic en el mapa. Lo que colocas son <b>eventos normales de MZ</b> con los comandos ★ de TacticsMZ: después puedes abrirlos en el editor de MZ.</p>${emptyHtml().replace(/<div class="card empty">[\s\S]*?<\/div>/,"")}<p class="help">Guía completa: docs/ASTRA_EDITOR.md</p>`,[{label:"Cerrar",value:0}]);
  document.addEventListener("keydown",onKey);
+ document.addEventListener("keyup",ev=>{if(ev.key===" "){S.space=false;$("overlay").style.cursor="";}});
  window.addEventListener("beforeunload",ev=>{if(S.dirty||(Astra.dbState&&Astra.dbState.dirty.size)){ev.preventDefault();ev.returnValue="";}});
  welcome();
 }

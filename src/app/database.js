@@ -30,7 +30,7 @@ Astra.openDatabase=function(tabId){
  if(!P())return;DB.open=true;if(tabId)DB.tab=tabId;$("dbWin").classList.remove("hidden");render();
 };
 function close(){DB.open=false;if(player)player.stop();$("dbWin").classList.add("hidden");Astra.ui.refresh();updateButton();}
-function updateButton(){const b=$("dbBtn");if(b)b.innerHTML="📚 Base de datos"+(DB.dirty.size?" <b>●</b>":"");const s=$("dbSave");if(s){s.disabled=!DB.dirty.size;s.innerHTML=DB.dirty.size?"💾 Guardar <b>●</b>":"💾 Guardado";s.classList.toggle("gold",!!DB.dirty.size);}}
+function updateButton(){const b=$("dbBtn");if(b)b.innerHTML="📖 Base de datos"+(DB.dirty.size?" <b>●</b>":"");const s=$("dbSave");if(s){s.disabled=!DB.dirty.size;s.innerHTML=DB.dirty.size?"💾 Guardar <b>●</b>":"💾 Guardado";s.classList.toggle("gold",!!DB.dirty.size);}}
 function dirty(what){DB.dirty.add(what);Astra.refreshDatabase(P());updateButton();}
 async function save(){
  const p=P();if(!DB.dirty.size)return;

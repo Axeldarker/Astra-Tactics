@@ -1,6 +1,7 @@
 # Cambios
 
 ## 0.3.0
+- **Interfaz nueva** en azul marino y oro: barra del capítulo con el resumen de la misión, paleta con iconos y atajos (Aliados `2`, Enemigos `3`), barra del mapa con vistas, interruptor de cuadrícula y zoom, panel derecho con pestañas *Unidades* / *Propiedades* y tarjeta de *Unidad seleccionada*, botón ▶ Probar misión y `Espacio` + arrastrar para mover el mapa.
 - **Base de datos en Astra** (botón 📚): personajes, clases, armas, objetos, habilidades, estados, terrenos, tabla de movimiento, colores de equipo, enemigos rápidos y animaciones, con iconos, retratos y sprites. Guarda en F9 (nota `<Tactics>`), en el paquete de gráficos y en plugins.js.
 - **Importador de animaciones de batalla**: paquetes de FE Essentials / FE Repo / FEBuilder (.zip, carpeta o script .txt + PNG, con orden, duraciones y golpe del script) y hojas PNG en rejilla. Vista previa igual que la batalla.
 - **Sprites de mapa**: subir PNG (formato GBA de 3 fotogramas o rejilla) y asignarlo a una clase.

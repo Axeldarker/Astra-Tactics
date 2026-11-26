@@ -9,34 +9,44 @@
 <body>
 <div id="app">
  <header id="top">
-  <div class="logo"><i>✦</i>ASTRA</div>
+  <div class="logo"><i>✦</i><span class="lt"><b>ASTRA</b><small>EDITOR TÁCTICO</small></span></div>
   <div class="sep"></div>
-  <select id="mapSelect" title="Mapa que estás editando"></select>
-  <button class="btn" id="missionBtn" title="Victoria, título, oro, mapa siguiente…">⚑ Misión</button>
-  <button class="btn" id="dbBtn" title="Personajes, clases, armas, objetos, terrenos, animaciones…">📚 Base de datos</button>
-  <button class="btn" id="importBtn" title="Animaciones, sprites de mapa, retratos e iconos: arrastra archivos o pega un enlace">📥 Importar</button>
+  <button class="btn" id="missionBtn" title="Victoria, título, oro, mapa siguiente…"><span class="bi">⚑</span> Misión</button>
+  <button class="btn" id="dbBtn" title="Personajes, clases, armas, objetos, terrenos, animaciones…">📖 Base de datos</button>
+  <button class="btn" id="importBtn" title="Animaciones, sprites de mapa, retratos e iconos: galería, archivos o enlaces">📥 Importar</button>
   <div class="sep"></div>
-  <button class="btn small" id="undoBtn" title="Deshacer (Ctrl+Z)">↶</button>
-  <button class="btn small" id="redoBtn" title="Rehacer (Ctrl+Y)">↷</button>
+  <button class="btn icon" id="undoBtn" title="Deshacer (Ctrl+Z)">↶</button>
+  <button class="btn icon" id="redoBtn" title="Rehacer (Ctrl+Y)">↷</button>
   <div class="grow"></div>
-  <div class="light" id="light" title="Estado de la misión. Haz clic para ver detalles."><b></b><span>—</span></div>
-  <button class="btn gold" id="saveBtn" title="Guardar en el proyecto (Ctrl+S)">💾 Guardar</button>
-  <button class="btn small" id="helpBtn" title="Ayuda y atajos">?</button>
+  <span class="savestate" id="saveState">✔ Guardado</span>
+  <button class="btn" id="saveBtn" title="Guardar en el proyecto (Ctrl+S)">💾 Guardar</button>
+  <button class="btn gold play" id="playBtn" title="Guarda, revisa la misión y te dice cómo probarla en MZ">▶ Probar misión</button>
  </header>
+ <div id="mission">
+  <div class="chapter"><small>◆ CAPÍTULO <span id="chapNo">01</span> ◆</small><select id="mapSelect" title="Mapa que estás editando"></select></div>
+  <div class="light" id="light" title="Estado de la misión. Haz clic para ver detalles."><span></span></div>
+ </div>
  <nav id="palette"></nav>
- <section id="viewport">
+ <main id="center">
   <div id="viewbar">
-   <button data-view="game" title="Imagen del mapa del paquete de gráficos, como en el juego">Juego</button>
-   <button data-view="tiles" title="Tiles del editor de MZ">Tiles MZ</button>
-   <button data-toggle="terrain" title="Ver el terreno táctico (regiones). T">Terreno</button>
-   <button data-toggle="grid" title="Cuadrícula. G">Cuadrícula</button>
-   <button data-zoom="-1" title="Alejar (−)">−</button>
-   <button data-zoom="1" title="Acercar (+)">+</button>
+   <div class="seg">
+    <button data-view="game" title="Imagen del mapa del paquete de gráficos, como en el juego">Juego</button>
+    <button data-view="tiles" title="Tiles del editor de MZ">Tiles MZ</button>
+    <button data-toggle="terrain" title="Ver el terreno táctico (regiones). T">Terreno</button>
+   </div>
+   <span class="vsep"></span>
+   <button class="tgl" data-toggle="grid" title="Cuadrícula. G"><span>Cuadrícula</span><i></i></button>
+   <span class="grow"></span>
+   <div class="zoombox"><button data-zoom="-1" title="Alejar (−)">−</button><span id="zoomPct">100%</span><button data-zoom="1" title="Acercar (+)">+</button></div>
+   <button class="fit" data-fit="1" title="Ajustar el mapa a la pantalla">⛶</button>
   </div>
-  <div id="stage"><canvas id="base"></canvas><canvas id="overlay"></canvas></div>
- </section>
- <aside id="inspector"><div class="scroll" id="inspectorBody"></div></aside>
- <footer id="status"><span id="statusTile">—</span><span id="statusHint"></span><span class="grow"></span><span id="statusZoom"></span><span id="statusProject"></span></footer>
+  <section id="viewport"><div id="stage"><canvas id="base"></canvas><canvas id="overlay"></canvas></div></section>
+ </main>
+ <aside id="inspector">
+  <div class="ptabs" id="ptabs"><button data-panel="units">Unidades</button><button data-panel="props">Propiedades</button></div>
+  <div class="scroll" id="inspectorBody"></div>
+ </aside>
+ <footer id="status"><span id="statusHint"></span><span id="statusTile">—</span><span class="grow"></span><span class="keyhint">Ctrl+rueda: zoom</span><span class="keyhint">Espacio: mover</span><span class="keyhint">Ctrl+Z: deshacer</span><span id="statusZoom"></span><span id="statusProject"></span><button class="btn icon round" id="helpBtn" title="Ayuda y atajos">?</button></footer>
 </div>
 <div id="tooltip" class="hidden"></div>
 <div id="toast"></div>

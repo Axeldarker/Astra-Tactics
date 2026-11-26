@@ -5,7 +5,7 @@
 const Astra=window.Astra,T=window.Tactics;
 // 16×16. Cada letra es un color de PAL; "." es transparente.
 const PAL={k:"#1b1420",r:"#b8433a",R:"#e5735f",w:"#efdcb0",W:"#c9a878",b:"#6b3f22",B:"#a86b3a",n:"#d9995a",y:"#ffe27a",
- g:"#f6cf4a",G:"#b5862c",s:"#a9b0b8",S:"#6c727c",u:"#3f7fd6",U:"#8cc0ff",e:"#d6474f",E:"#ff8a8a",v:"#4fae5b",p:"#d6474f",P:"#ff8a8a",o:"#f4f4f4",O:"#9fb0a8"};
+ g:"#f6cf4a",G:"#b5862c",s:"#a9b0b8",S:"#6c727c",u:"#3f7fd6",U:"#8cc0ff",e:"#d6474f",E:"#ff8a8a",v:"#4fae5b",p:"#d6474f",P:"#ff8a8a",o:"#f4f4f4",O:"#9fb0a8",V:"#86d46a"};
 const HOUSE=["................",".......kk.......","......kRRk......",".....kRrrRk.....","....kRrrrrRk....","...kRrrrrrrRk...","..kRrrrrrrrrRk..",".kRrrrrrrrrrrRk.",
  "kkkkkkkkkkkkkkkk",".kwwwwwwwwwwwwk.",".kwkkkwwwwkkkwk.",".kwkykwwwwkbkwk.",".kwkkkwwwwkbkwk.",".kWWWWWWWWkbkWk.",".kkkkkkkkkkkkkk.","................"];
 const swap=(rows,map)=>rows.map(r=>r.replace(/./g,c=>map[c]||c));
@@ -25,6 +25,10 @@ Astra.PIXEL={
  deploy:swap(FLAG,{e:"u",g:"U"}),
  enemy:HELMET,
  ally:swap(HELMET,{p:"u",P:"U"}),
+ // paleta: elegir, terreno y borrar
+ select:["................","..kk............","..kyk...........","..kyyk..........","..kyyyk.........","..kyyyyk........","..kyyyyyk.......","..kyyyyyyk......","..kyyyyyyyk.....","..kyyyyykkkk....","..kyykyyk.......","..kyk.kyyk......","..kk..kyyk......",".......kyyk.....",".......kkk......","................"],
+ terrain:["................","................","..kkkkkkkkkkkk..",".kVVvVVVvVVvVVk.",".kvVVVvVVVVvVvk.",".kVvVVVVvVVVVVk.",".kvvvvvvvvvvvvk.",".kBBnBBBnBBBnBk.",".kBbBBnBBbBBBBk.",".kBBBbBBBBnBbBk.",".kbBBBBbBBBBBbk.",".kkkkkkkkkkkkkk.","................","................","................","................"],
+ erase:["................","..kk........kk..",".kRrk......kRrk.",".krrrk....krrrk.","..krrrk..krrrk..","...krrrkkrrrk...","....krrrrrrk....",".....krrrrk.....",".....krrrrk.....","....krrrrrrk....","...krrrkkrrrk...","..krrrk..krrrk..",".krrrk....krrrk.",".krrk......krrk.","..kk........kk..","................"],
  // tipos de arma (galería), blancos para ir sobre un cuadro verde como en FE Essentials
  wsword:["................", "..............oo", ".............ooO", "............ooO.", "...........ooO..", "..........ooO...", ".........ooO....", "........ooO.....", ".......ooO......", "..o...ooO.......", "..oo.ooO........", "...ooOO.........", "....oo..........", "...O.oo.........", "..O...o.........", "................"],
  wlance:["...........oooo.", "............ooo.", "...........o.oo.", "..........O...o.", ".........O......", "........O.......", ".......O........", "......O.........", ".....O..........", "....O...........", "...O............", "..O.............", ".O..............", "O...............", "................", "................"],

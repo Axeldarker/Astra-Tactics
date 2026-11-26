@@ -45,8 +45,8 @@ Lo que colocas se guarda como **eventos normales de MZ** con los comandos ★ de
    La próxima vez tendrás un botón **↻ Reabrir** para no tener que buscarla.
 4. Si tu proyecto usa TacticsMZ 0.2, Astra te ofrecerá **actualizar los plugins**. Acepta (ver [§10](#10-actualizar-los-plugins-desde-astra)).
 5. Arriba a la izquierda, **elige el mapa** de la batalla.
-6. En la paleta de la izquierda pulsa **Aliado** (o la tecla `3`) y haz clic en una casilla. A la derecha elige el personaje y marca **Es el líder**.
-7. Pulsa **Enemigo** (`2`) y haz clic donde quieras enemigos. Cambia la clase y el nivel a la derecha. **Cada enemigo nuevo copia los ajustes del anterior**, así que poner 10 soldados iguales son 10 clics.
+6. En la paleta de la izquierda pulsa **Aliados** (o la tecla `2`) y haz clic en una casilla. A la derecha verás la *Unidad seleccionada*; pulsa **✎ Editar propiedades** para cambiar el personaje o marcar **Es el líder**.
+7. Pulsa **Enemigos** (`3`) y haz clic donde quieras enemigos. Cambia la clase y el nivel a la derecha. **Cada enemigo nuevo copia los ajustes del anterior**, así que poner 10 soldados iguales son 10 clics.
 8. Mira el **semáforo** de arriba: 🟢 significa que la misión está lista.
 9. Pulsa **💾 Guardar** (o `Ctrl+S`).
 10. Abre el proyecto en MZ y pulsa **Probar**.
@@ -56,28 +56,33 @@ Lo que colocas se guarda como **eventos normales de MZ** con los comandos ★ de
 ## 3. La pantalla
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ ✦ ASTRA │ Mapa ▾ │ ⚑ Misión │ ↶ ↷ │      🟢 semáforo de la misión │ 💾 │ ?  │
-├────────┬───────────────────────────────────────────────────┬─────────────────┤
-│ Elegir │ [Juego][Tiles MZ][Terreno][Cuadrícula][−][+]       │                 │
-│ Enemigo│                                                   │   Inspector:    │
-│ Aliado │                 TU MAPA                           │   lo que has    │
-│ Cofre  │                                                   │   elegido y sus │
-│ ...    │                                                   │   opciones      │
-│ Terreno│                                                   │                 │
-│ Borrar │                                                   │                 │
-├────────┴───────────────────────────────────────────────────┴─────────────────┤
-│ Casilla 12, 7 · 18 Peak · coste 3      pista de la herramienta    🔍 75%  📁 │
-└──────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ ✦ ASTRA │ ⚑ Misión │ 📖 Base de datos │ 📥 Importar │ ↶ ↷ │ ✔ Guardado │ 💾 │ ▶ Probar │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│ ◆ CAPÍTULO 01 ◆  El paso de los faros ▾   │ ⚑ Derrotar jefes │ 3 aliados │ 4 enemigos │
+├────────────┬─────────────────────────────────────────────┬───────────────────────┤
+│ ↖ Elegir  1│ [Juego|Tiles MZ|Terreno] Cuadrícula ◉  − 100% + ⛶ │ [Unidades][Propiedades]│
+│ Aliados   2│ ┌─────────────────────────────────────────┐ │ Desplegar unidades    │
+│ Enemigos  3│ │                                         │ │  🔍 Buscar…           │
+│ ─── ◆ ──── │ │               TU MAPA                   │ │  [Aliados][Enemigos]  │
+│ Cofres    4│ │                                         │ │  ▸ Armor Guy  Nv. 1   │
+│ …          │ └─────────────────────────────────────────┘ │ Unidad seleccionada   │
+│ Borrar     │                                             │  retrato · PV · arma  │
+├────────────┴─────────────────────────────────────────────┴───────────────────────┤
+│ pista de la herramienta · Casilla 12, 7 · 18 Peak    Ctrl+rueda │ Espacio │ Ctrl+Z │ ? │
+└──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 | Zona | Para qué |
 |---|---|
-| **Barra superior** | Cambiar de mapa, abrir la configuración de la misión, deshacer/rehacer, ver si la misión está lista y guardar. |
+| **Barra superior** | Configurar la misión, abrir la base de datos, importar recursos, deshacer/rehacer, ver si hay cambios sin guardar, guardar y **▶ Probar misión**. |
+| **Barra del capítulo** | El mapa que editas (haz clic en el nombre para cambiar de mapa) y el resumen de la misión: objetivo, aliados, enemigos, refuerzos y avisos. En rojo si algo impide jugarla. Haz clic en el resumen para ver los detalles. |
 | **Paleta** (izquierda) | La herramienta activa. Cada una tiene su número de atajo. |
-| **Mapa** (centro) | Tu mapa de verdad, con lo que has colocado encima. Al pasar el ratón ves qué hay en cada casilla. |
-| **Inspector** (derecha) | Las opciones de lo que tienes elegido, o una mini guía si no hay nada elegido. |
-| **Barra inferior** | Casilla bajo el ratón, su terreno y su coste de movimiento, y qué hace la herramienta. |
+| **Mapa** (centro) | Tu mapa de verdad, con lo que has colocado encima. Arriba eliges la vista (*Juego*, *Tiles MZ*, *Terreno*), la cuadrícula y el zoom; **⛶** lo ajusta a la pantalla. |
+| **Panel derecho** | **Unidades**: tus personajes y enemigos para desplegar, y la *Unidad seleccionada* (retrato, clase, nivel, PV y arma). **Propiedades**: todas las opciones de lo que tienes elegido (cofres, aldeas, la misión…). Pulsa **✎ Editar propiedades** para pasar de una a otra. |
+| **Barra inferior** | Qué hace la herramienta, la casilla bajo el ratón con su terreno y coste, y los atajos más útiles. |
+
+**▶ Probar misión** guarda el mapa, revisa la misión y te dice cómo probarla. El navegador no puede abrir RPG Maker MZ por ti: ábrelo (o vuelve a abrirlo sin guardar) y pulsa *Reproducir prueba*.
 
 ### Qué significan los dibujos del mapa
 
@@ -105,8 +110,8 @@ Si eliges una unidad, verás su **alcance**: en **azul** dónde puede moverse y 
 | Tecla | Herramienta | Qué hace al hacer clic en el mapa |
 |---|---|---|
 | `1` | **Elegir** ↖ | Elige lo que hay en la casilla. Arrástralo para moverlo. |
-| `2` | **Enemigo** | Coloca un ★ Enemigo. |
-| `3` | **Aliado** | Coloca un ★ Aliado. El primero se marca como líder automáticamente. |
+| `2` | **Aliados** | Coloca un ★ Aliado. El primero se marca como líder automáticamente. |
+| `3` | **Enemigos** | Coloca un ★ Enemigo. |
 | `4` | **Cofre** | Coloca un ★ Cofre (se abre con llave o con Cerrajería). |
 | `5` | **Puerta** | Coloca una ★ Puerta. |
 | `6` | **Aldea** | Coloca una ★ Aldea que se puede visitar. |
@@ -122,12 +127,12 @@ Si haces clic con una herramienta de colocar sobre algo que ya existe, Astra **l
 
 ### Unidades de la base de datos (panel derecho)
 
-Con la herramienta **Enemigo** o **Aliado** (o *Elegir* sin nada seleccionado), el panel derecho muestra **tus unidades de F9** con su sprite o retrato:
+En la pestaña **Unidades** del panel derecho están **tus unidades de F9** con su retrato o sprite, y un buscador:
 
 - **Aliados**: tus personajes. Los que ya están en el mapa llevan la etiqueta *en el mapa*.
 - **Enemigos**: primero tus *Enemigos rápidos* (plantillas) y después todas las clases, con el **Nivel** que elijas arriba.
 
-Haz **clic** en una tarjeta y luego clic en el mapa (puedes colocar varias seguidas), o **arrástrala** directamente a la casilla.
+Haz **clic** en una fila y luego clic en el mapa (puedes colocar varias seguidas), o **arrástrala** directamente a la casilla.
 
 ---
 
@@ -343,7 +348,7 @@ Si no está seguro, te marca la opción más probable y eliges tú. Los retratos
 | `G` | Ver u ocultar la cuadrícula |
 | `+` / `−`, `Ctrl` + rueda | Zoom |
 | Clic derecho | Volver a *Elegir* |
-| Botón central + arrastrar | Desplazar el mapa |
+| Botón central + arrastrar, o `Espacio` + arrastrar | Desplazar el mapa |
 
 ---
 
