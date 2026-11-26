@@ -8,7 +8,7 @@
 (function(root) {
 "use strict";
 const T = root.Tactics = root.Tactics || {};
-T.version = "0.2.0";
+T.version = "0.3.0";
 const copy = T.copy = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const clamp = T.clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const dist = T.distance = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);

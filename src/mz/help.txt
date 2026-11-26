@@ -1,0 +1,25 @@
+Código MIT. Conserva LICENSE al redistribuir.
+Requiere una copia legítima de RPG Maker MZ.
+
+INSTALACIÓN (3 plugins, en este orden):
+  1. TacticsEngine   2. TacticsUI   3. TacticsMZ
+Si vienes de la v0.2: desactiva TacticsSystem, TacticsCommands, TacticsRules,
+TacticsView, TacticsGraphics, TacticsPresentation, TacticsScenes y TacticsData.
+Tus mapas y partidas guardadas siguen funcionando.
+
+EMPEZAR EN 3 PASOS
+  1. En un evento del mapa: ★ Aliado (elige el personaje, marca "Es el líder").
+  2. En otros eventos: ★ Enemigo (elige clase y nivel).
+  3. En un evento normal de otro mapa: Abrir misión.
+Configurar misión ya no es obligatorio: sin él la misión es "Eliminar enemigos"
+(o "Conquistar" si pones alguna Casilla de conquista).
+
+COMANDOS RÁPIDOS (★)
+  ★ Enemigo, ★ Aliado, ★ Refuerzo, ★ Cofre, ★ Puerta, ★ Aldea, ★ Tienda, ★ Reclutable.
+  Son atajos: por dentro se convierten en los comandos clásicos, que siguen disponibles.
+
+NOTAS DE F9 SIN JSON
+  <Mov: 7>  <Tipo: volador>  <Promociona: 7, 8>  <Alcance: 1-2>  <Golpe: 90>
+  <Efecto: robar>  <Llave: cofre>  … El formato <Tactics>{JSON}</Tactics> sigue valiendo.
+
+Guía y cambios: README.md y docs/ANTES_Y_DESPUES.md

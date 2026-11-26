@@ -1,19 +1,273 @@
+/* TacticsMZ v0.3.0 | Copyright (c) 2026 TacticsMZ contributors | MIT License */
+/* Archivo generado por tools/build.js desde src/. No lo edites a mano. */
 /*:
  * @target MZ
- * @plugindesc v0.2.0 TacticsMZ: comandos para crear campañas tácticas.
+ * @plugindesc v0.3.0 TacticsMZ: crea campañas tácticas con comandos de evento.
  * @author TacticsMZ contributors
  * @url https://opensource.org/license/mit
+ * @base TacticsEngine
+ * @base TacticsUI
+ * @orderAfter TacticsUI
  * @param ResourcePack
  * @text Paquete de gráficos externo (JSON)
  * @type string
  * @default
+ *
+ * @param EnemyPresets
+ * @text Plantillas de enemigo
+ * @desc Define cada tipo de enemigo una vez (clase, nivel, rol, arma) y úsalo por nombre en ★ Enemigo.
+ * @type struct<EnemyPreset>[]
+ * @default []
  * @help
  * Código MIT. Conserva LICENSE al redistribuir.
- * Orden: TacticsSystem, TacticsCommands, TacticsRules, TacticsView, TacticsGraphics, TacticsPresentation, TacticsScenes, TacticsData, TacticsMZ.
- * Crea eventos usando solamente los comandos de este plugin.
- * La configuración adicional de F9 utiliza bloques <Tactics> JSON </Tactics>.
- * Lee Manuales/01_Primera_mision.md y Manuales/02_Comandos.md.
- * Requiere una copia legítima de RPG Maker MZ para editar juegos MZ.
+ * Requiere una copia legítima de RPG Maker MZ.
+ *
+ * INSTALACIÓN (3 plugins, en este orden):
+ *   1. TacticsEngine   2. TacticsUI   3. TacticsMZ
+ * Si vienes de la v0.2: desactiva TacticsSystem, TacticsCommands, TacticsRules,
+ * TacticsView, TacticsGraphics, TacticsPresentation, TacticsScenes y TacticsData.
+ * Tus mapas y partidas guardadas siguen funcionando.
+ *
+ * EMPEZAR EN 3 PASOS
+ *   1. En un evento del mapa: ★ Aliado (elige el personaje, marca "Es el líder").
+ *   2. En otros eventos: ★ Enemigo (elige clase y nivel).
+ *   3. En un evento normal de otro mapa: Abrir misión.
+ * Configurar misión ya no es obligatorio: sin él la misión es "Eliminar enemigos"
+ * (o "Conquistar" si pones alguna Casilla de conquista).
+ *
+ * COMANDOS RÁPIDOS (★)
+ *   ★ Enemigo, ★ Aliado, ★ Refuerzo, ★ Cofre, ★ Puerta, ★ Aldea, ★ Tienda, ★ Reclutable.
+ *   Son atajos: por dentro se convierten en los comandos clásicos, que siguen disponibles.
+ *
+ * NOTAS DE F9 SIN JSON
+ *   <Mov: 7>  <Tipo: volador>  <Promociona: 7, 8>  <Alcance: 1-2>  <Golpe: 90>
+ *   <Efecto: robar>  <Llave: cofre>  … El formato <Tactics>{JSON}</Tactics> sigue valiendo.
+ *
+ * Guía y cambios: README.md y docs/ANTES_Y_DESPUES.md
+ *
+ * @command Enemy
+ * @text ★ Enemigo
+ * @desc Rápido. Elige clase y nivel (o una plantilla) y listo. Aparece en la casilla de este evento.
+ * @arg preset
+ * @text Plantilla (nombre, opcional)
+ * @type string
+ * @default 
+ * @arg classId
+ * @text Clase (0 = la de la plantilla)
+ * @type class
+ * @default 0
+ * @arg level
+ * @text Nivel (0 = plantilla o 1)
+ * @type number
+ * @min -999999
+ * @max 999999
+ * @default 0
+ * @arg role
+ * @text Rol
+ * @type select
+ * @option Según plantilla (o Soldado)
+ * @value auto
+ * @option Soldado: avanza y ataca
+ * @value soldier
+ * @option Guardia: defiende su zona
+ * @value guard
+ * @option Torreta: no se mueve, ataca en rango
+ * @value hold
+ * @option Jefe: no se mueve, es jefe y suelta su botín
+ * @value boss
+ * @option Curandero: cura a sus aliados
+ * @value healer
+ * @option Ladrón: abre cofres y huye
+ * @value thief
+ * @option Saqueador: arrasa aldeas
+ * @value pillager
+ * @option Patrulla: se mueve al azar
+ * @value patrol
+ * @default auto
+ * @arg name
+ * @text Nombre (vacío = la clase)
+ * @type string
+ * @default 
+ * @arg weaponId
+ * @text Arma (0 = la de la clase)
+ * @type weapon
+ * @default 0
+ * @arg itemId
+ * @text Objeto que lleva (0 = ninguno)
+ * @type item
+ * @default 0
+ * @arg loot
+ * @text Suelta lo que lleva al caer
+ * @type boolean
+ * @default false
+ *
+ * @command Ally
+ * @text ★ Aliado
+ * @desc Rápido. Un personaje de F9 en la casilla de este evento. Conserva su progreso entre misiones.
+ * @arg actorId
+ * @text Personaje
+ * @type actor
+ * @default 0
+ * @arg level
+ * @text Nivel (0 = el de F9)
+ * @type number
+ * @min -999999
+ * @max 999999
+ * @default 0
+ * @arg lord
+ * @text Es el líder (si cae, se pierde)
+ * @type boolean
+ * @default false
+ * @arg onlyRecruited
+ * @text Solo si ya fue reclutado
+ * @type boolean
+ * @default false
+ *
+ * @command Reinforcement
+ * @text ★ Refuerzo
+ * @desc Ponlo debajo de Enemigo/Aliado/Colocar unidad. Esa unidad no está al inicio: llega cuando digas. No hace falta otro evento.
+ * @arg turn
+ * @text Turno de llegada
+ * @type number
+ * @min -999999
+ * @max 999999
+ * @default 2
+ * @arg phase
+ * @text Fase en la que llega
+ * @type select
+ * @option La del equipo de la unidad
+ * @value 0
+ * @option Aliados
+ * @value 1
+ * @option Enemigos
+ * @value 2
+ * @option Independientes
+ * @value 3
+ * @default 0
+ * @arg every
+ * @text Repetir cada N turnos (0 = solo una vez)
+ * @type number
+ * @min -999999
+ * @max 999999
+ * @default 0
+ * @arg switchId
+ * @text …o al activar este interruptor (0 = usar el turno)
+ * @type switch
+ * @default 0
+ * @arg count
+ * @text Cuántas copias
+ * @type number
+ * @min -999999
+ * @max 999999
+ * @default 1
+ * @arg x
+ * @text Casilla X (-1 = la del evento)
+ * @type number
+ * @min -999999
+ * @max 999999
+ * @default -1
+ * @arg y
+ * @text Casilla Y (-1 = la del evento)
+ * @type number
+ * @min -999999
+ * @max 999999
+ * @default -1
+ *
+ * @command Chest
+ * @text ★ Cofre
+ * @desc Rápido. Se abre con llave o con Cerrajería. Elige UNA recompensa (arma u objeto) y/o oro.
+ * @arg itemId
+ * @text Objeto
+ * @type item
+ * @default 0
+ * @arg weaponId
+ * @text Arma
+ * @type weapon
+ * @default 0
+ * @arg gold
+ * @text Oro
+ * @type number
+ * @min -999999
+ * @max 999999
+ * @default 0
+ *
+ * @command Door
+ * @text ★ Puerta
+ * @desc Rápido. Se abre con llave o con Cerrajería. Ocupa la casilla del evento (o un rectángulo).
+ * @arg width
+ * @text Ancho
+ * @type number
+ * @min -999999
+ * @max 999999
+ * @default 1
+ * @arg height
+ * @text Alto
+ * @type number
+ * @min -999999
+ * @max 999999
+ * @default 1
+ *
+ * @command Village
+ * @text ★ Aldea
+ * @desc Rápido. Visitar muestra el texto y da la recompensa. Las acciones que pongas debajo en este evento también se ejecutan.
+ * @arg name
+ * @text Nombre
+ * @type string
+ * @default 
+ * @arg text
+ * @text Texto al visitar
+ * @type string
+ * @default 
+ * @arg itemId
+ * @text Objeto de regalo
+ * @type item
+ * @default 0
+ * @arg weaponId
+ * @text Arma de regalo
+ * @type weapon
+ * @default 0
+ * @arg gold
+ * @text Oro de regalo
+ * @type number
+ * @min -999999
+ * @max 999999
+ * @default 0
+ * @arg recruit
+ * @text Unidad que se une (ID de evento, 0 = ninguna)
+ * @type number
+ * @min -999999
+ * @max 999999
+ * @default 0
+ *
+ * @command Shop
+ * @text ★ Tienda
+ * @desc Rápido. Escribe los IDs separados por comas, p. ej. 1,2,5. Existencias infinitas y precio de F9.
+ * @arg name
+ * @text Nombre
+ * @type string
+ * @default Tienda
+ * @arg weapons
+ * @text Armas en venta (IDs)
+ * @type string
+ * @default 
+ * @arg items
+ * @text Objetos en venta (IDs)
+ * @type string
+ * @default 
+ *
+ * @command Recruit
+ * @text ★ Reclutable
+ * @desc Ponlo en el evento del enemigo que se puede reclutar hablando. Las acciones que pongas debajo se ejecutan al hablar.
+ * @arg by
+ * @text Quién puede reclutarlo (ID de evento, 0 = el líder)
+ * @type number
+ * @min -999999
+ * @max 999999
+ * @default 0
+ * @arg text
+ * @text Lo que dice al unirse
+ * @type string
+ * @default 
  *
  * @command Mission
  * @text Configurar misión
@@ -130,7 +384,6 @@
  * @command Deployment
  * @text Casilla de despliegue
  * @desc La posición de este evento será una casilla disponible en el mapa de preparación. Activa Preparación en Configurar continuidad.
-
  *
  * @command Unit
  * @text Colocar unidad
@@ -265,12 +518,10 @@
  * @command Template
  * @text Plantilla de refuerzo
  * @desc Añádelo a un evento con Colocar unidad. No aparece al inicio.
-
  *
  * @command Goal
  * @text Casilla de conquista
  * @desc La posición de este evento se convierte en un objetivo.
-
  *
  * @command Interaction
  * @text Configurar interacción
@@ -1275,12 +1526,10 @@
  * @command Else
  * @text Si no se cumple
  * @desc Rama alternativa del Si anterior.
-
  *
  * @command EndIf
  * @text Fin de condición
  * @desc Cierra la condición más reciente.
-
  *
  * @command RunEvent
  * @text Ejecutar otro evento
@@ -1315,7 +1564,6 @@
  * @command StopEvent
  * @text Terminar secuencia
  * @desc No ejecuta las acciones restantes de esta llamada.
-
  *
  * @command Dialogue
  * @text Mostrar diálogo
@@ -2077,6 +2325,7 @@
  * @text Nombre de pista guardada
  * @type string
  * @default 
+ *
  */
 /*~struct~Equipment:
  * @param kind
@@ -2176,35 +2425,68 @@
  * @max 999999
  * @default -1
  */
-/* TacticsMZ | Copyright (c) 2026 TacticsMZ contributors | MIT License */
+/*~struct~EnemyPreset:
+ * @param name
+ * @text Nombre de la plantilla (lo escribes en ★ Enemigo)
+ * @type string
+ * @default Soldado
+ * @param classId
+ * @text Clase
+ * @type class
+ * @default 0
+ * @param level
+ * @text Nivel
+ * @type number
+ * @min -999999
+ * @max 999999
+ * @default 1
+ * @param role
+ * @text Rol
+ * @type select
+ * @option Soldado: avanza y ataca
+ * @value soldier
+ * @option Guardia: defiende su zona
+ * @value guard
+ * @option Torreta: no se mueve, ataca en rango
+ * @value hold
+ * @option Jefe: no se mueve, es jefe y suelta su botín
+ * @value boss
+ * @option Curandero: cura a sus aliados
+ * @value healer
+ * @option Ladrón: abre cofres y huye
+ * @value thief
+ * @option Saqueador: arrasa aldeas
+ * @value pillager
+ * @option Patrulla: se mueve al azar
+ * @value patrol
+ * @default soldier
+ * @param weaponId
+ * @text Arma (0 = la de la clase)
+ * @type weapon
+ * @default 0
+ * @param itemId
+ * @text Objeto (0 = ninguno)
+ * @type item
+ * @default 0
+ * @param loot
+ * @text Suelta lo que lleva al caer
+ * @type boolean
+ * @default false
+ */
 (function(root){
 "use strict";
 const T=root.Tactics;
-function note(row){
- const match=String(row.note||"").match(/<Tactics>([\s\S]*?)<\/Tactics>/i);
- if(!match)return {};
- try{return JSON.parse(match[1]);}catch(error){throw new Error("F9: nota Tactics inválida en "+row.id+" · "+row.name+": "+error.message);}
-}
-T.readDatabase=function(data){
- const db={classes:{},actors:{},weapons:{},items:{},skills:{},states:{},terrain:T.copy(T.exampleDatabase?T.exampleDatabase.terrain:{0:{name:"Suelo",cost:1,color:"#667f60"}}),triangle:["blade","pole","axe"]};
- const rows=(name,fn)=>(data[name]||[]).filter(Boolean).forEach(row=>fn(row,note(row)));
- rows("classes",(c,n)=>{const param=i=>(c.params&&c.params[i]&&c.params[i][1])||0;const types=(c.traits||[]).filter(t=>t.code===51).map(t=>String(t.dataId));
-  db.classes[c.id]=Object.assign({id:c.id,name:c.name,stats:{health:Math.max(1,param(0)),power:param(2),magic:param(4),skill:param(6),speed:param(6),luck:param(7),defense:param(3),resistance:param(5),move:5,build:6},growth:{health:60,power:35,magic:35,skill:40,speed:35,luck:30,defense:25,resistance:25},weaponTypes:types,ranks:Object.fromEntries(types.map(t=>[t,0])),skills:[],inventory:[],promotions:[],moveType:"foot",learn:(c.learnings||[]).map(l=>({level:l.level,skill:l.skillId}))},n);
- });
- rows("actors",(a,n)=>{db.actors[a.id]=Object.assign({id:a.id,name:a.name,profile:a.profile||"",classId:a.classId,level:a.initialLevel,face:a.faceName?"img/faces/"+a.faceName+".png":"",faceIndex:a.faceIndex||0,characterIndex:a.characterIndex||0,graphic:a.characterName,inventory:a.equips&&a.equips[0]?[{kind:"weapon",id:a.equips[0]}]:undefined},n);});
- rows("weapons",(w,n)=>db.weapons[w.id]=Object.assign({id:w.id,name:w.name,description:w.description||"",iconIndex:w.iconIndex||0,category:String(w.wtypeId),might:(w.params||[])[2]||0,hit:85,crit:0,weight:5,minRange:1,maxRange:1,uses:35,price:w.price,rank:0},n));
- rows("items",(i,n)=>{const effect=(i.effects||[]).find(e=>e.code===11);db.items[i.id]=Object.assign({id:i.id,name:i.name,description:i.description||"",iconIndex:i.iconIndex||0,effect:effect?"heal":"passive",power:effect?effect.value2:0,healPercent:effect?effect.value1:0,uses:i.consumable?1:0,price:i.price},n);});
- rows("skills",(s,n)=>db.skills[s.id]=Object.assign({id:s.id,name:s.name,description:s.description||"",iconIndex:s.iconIndex||0,effects:[]},n));
- rows("states",(s,n)=>db.states[s.id]=Object.assign({id:s.id,name:s.name,description:s.description||"",iconIndex:s.iconIndex||0,effects:[]},n));
- return db;
-};
 T.audioBridge=function(manager){return {
  battleStart:(p,name)=>{if(p.mapBgm===undefined)p.mapBgm=T.copy(manager.saveBgm());manager.playBgm({name,volume:80,pitch:100,pan:0});},
  battleEnd:p=>{if(p.mapBgm&&p.mapBgm.name)manager.replayBgm(p.mapBgm);else manager.stopBgm();},
  victory:name=>{if(name)manager.playMe({name,volume:85,pitch:100,pan:0});}
 };};
 if(typeof Scene_Base==="undefined")return;
-const resourceName=String(PluginManager.parameters("TacticsMZ").ResourcePack||"");
+T.assert(T.catalog&&T.readDatabase&&T.desugarMap,"TacticsMZ: falta TacticsEngine.js. Actívalo encima de TacticsMZ en el Administrador de plugins.");
+T.assert(T.View&&T.presentation,"TacticsMZ: falta TacticsUI.js. Actívalo entre TacticsEngine y TacticsMZ en el Administrador de plugins.");
+const pluginParams=PluginManager.parameters("TacticsMZ");
+T.setEnemyPresets(T.decode(pluginParams.EnemyPresets||"[]"));
+const resourceName=String(pluginParams.ResourcePack||"");
 if(resourceName){T.assert(/^[a-zA-Z0-9_/-]+$/.test(resourceName),"Nombre de paquete gráfico inválido");DataManager._databaseFiles.push({name:"$dataTacticsGraphics",src:resourceName+".json"});}
 let active=null,pending=null,opening=false,resume=false;
 const database=()=>{const db=T.readDatabase({classes:$dataClasses,actors:$dataActors,weapons:$dataWeapons,items:$dataItems,skills:$dataSkills,states:$dataStates});db.tilesets=T.copy(root.$dataTilesets||[]);if(root.$dataTacticsGraphics){db.graphics=T.copy(root.$dataTacticsGraphics);if(db.graphics.terrain)db.terrain=db.graphics.terrain;}return db;};

@@ -1,0 +1,365 @@
+// Astra Editor · 🎮 importar un hack de FE8 (The Sacred Stones, USA).
+// El usuario aporta su ROM limpia y el parche del hack (.ups / .bps) o la ROM ya parcheada.
+// Astra compara las dos y trae solo lo que el hack cambió: capítulos (mapa dibujado, terreno,
+// unidades, cofres, puertas, aldeas, tiendas y trono) y los personajes, clases y objetos que el
+// hack cambia o que esos capítulos usan. La lógica está en src/editor/03_Rom.js.
+"use strict";
+(function(){
+const Astra=window.Astra,T=window.Tactics,M=T.Editor,D=M.Db,R=M.Rom;
+const esc=s=>Astra.ui.esc(s);
+const $=id=>document.getElementById(id);
+const P=()=>Astra.state.project;
+const pause=()=>new Promise(r=>setTimeout(r,20));
+const isPatch=f=>/\.(ups|bps)$/i.test(f.name);
+const isRom=f=>/\.gba$/i.test(f.name);
+Astra.isRomImport=files=>(files||[]).some(f=>isPatch(f)||isRom(f));
+
+// Save transparent original-pixel PNGs. Per-team sheets avoid changing the project's global palette.
+async function png(p,path,img,scale=1){
+ const src=document.createElement("canvas");src.width=img.width;src.height=img.height;
+ src.getContext("2d").putImageData(new ImageData(img.data,img.width,img.height),0,0);
+ let out=src;if(scale!==1){out=document.createElement("canvas");out.width=img.width*scale;out.height=img.height*scale;const x=out.getContext("2d");x.imageSmoothingEnabled=false;x.drawImage(src,0,0,out.width,out.height);}
+ const blob=await new Promise((resolve,reject)=>out.toBlob(b=>b?resolve(b):reject(new Error("No pude codificar "+path)),"image/png"));
+ await p.backend.write(path,blob);delete p.images[path];return src;
+}
+// Extra GBA resources are stored independently; importing them never overwrites a configured background.
+async function installExtras(p,pack,ctx,source,extras,hint){
+ const out={backgrounds:0,platforms:0,warnings:[...extras.warnings]},code=R.gameCode(ctx.rom),prefix=code+"_"+source;
+ pack.battleAssets=pack.battleAssets||{};
+ for(const [group,kind] of [[extras.backgrounds,"background"],[extras.platforms,"platform"]])for(const row of group){
+  const id=prefix+"_"+kind+"_"+row.id,path="img/astra/gba/"+prefix+"/"+kind+"/"+row.id+".png";
+  try{hint("Recursos de batalla · "+row.name);await png(p,path,row.image);pack.battleAssets[id]={id,name:row.name,kind,path,width:row.image.width,height:row.image.height,gameCode:code,source,romId:row.id};out[kind==="background"?"backgrounds":"platforms"]++;}
+  catch(e){out.warnings.push(row.name+": "+e.message);}
+ }
+ return out;
+}
+async function installStandaloneAnimations(p,pack,ctx,source,ids,hint){
+ const out={animations:0,clips:0,warnings:[]},code=R.gameCode(ctx.rom);pack.atlases=pack.atlases||{};pack.clips=pack.clips||{};
+ for(const [index,id] of ids.entries()){
+  hint("Animaciones de biblioteca · "+(index+1)+"/"+ids.length);await pause();
+  try{const a=R.battleAnimation(ctx,id);if(!a)throw Error("Pista no legible");const name=code+"_"+source+"_Anim_"+id,path="img/astra/gba/"+code+"_"+source+"/battle/"+id+".png",built=R.animationPack(a,name,path);await png(p,path,built.image);pack.atlases[name]=built.atlas;Object.assign(pack.clips,built.clips);out.animations++;out.clips+=Object.keys(built.clips).length;out.warnings.push(...a.errors.map(e=>name+" · "+e));}catch(e){out.warnings.push("Animación "+id+": "+e.message);}
+ }
+ return out;
+}
+Astra.importBattleEffect=function(p,ensurePack,done){
+ const {win,closeWin}=Astra.imgTools,w=win(`<header><h2>✦ Nuevo Battle Effect · hoja PNG</h2><span class="grow"></span><button class="btn small" data-fx="close">✕</button></header><div class="awbody single"><div class="romimp"><p>Importa una hoja PNG transparente (fotogramas iguales, en orden de lectura). Se registrará como efecto de impacto visual para armas mágicas, sin alterar estadísticas ni importar código GBA.</p><label class="field">Nombre<input id="fxName" placeholder="Ej. Relámpago"></label><label class="field">Hoja PNG<input id="fxFile" type="file" accept="image/png"></label><div class="row3"><label class="field">Ancho de celda<input id="fxW" type="number" min="1" max="512" value="64"></label><label class="field">Alto de celda<input id="fxH" type="number" min="1" max="512" value="64"></label><label class="field">FPS<input id="fxFPS" type="number" min="1" max="60" value="12"></label></div><p class="help" id="fxStatus">Selecciona un PNG.</p><canvas id="fxPreview" width="160" height="160" style="image-rendering:pixelated;border:1px solid var(--line);background:#0a1226;max-width:100%"></canvas></div></div><footer><span class="grow"></span><button class="btn" data-fx="close">Cancelar</button><button class="btn gold" data-fx="save" disabled id="fxSave">Guardar efecto</button></footer>`);
+ let image=null,file=null,busy=false;
+ const info=()=>{if(!image)return null;const cw=Number($("fxW").value),ch=Number($("fxH").value),fps=Number($("fxFPS").value);if(![cw,ch,fps].every(Number.isInteger)||cw<1||ch<1||cw>512||ch>512||fps<1||fps>60||image.width%cw||image.height%ch)return null;const rects=D.grid(image.width,image.height,cw,ch).map(r=>({x:r.x,y:r.y,w:r.w,h:r.h,ox:r.w/2,oy:r.h/2}));return rects.length>0&&rects.length<=240?{rects,cw,ch,fps}:null;};
+ function preview(){const f=info(),c=$("fxPreview"),x=c.getContext("2d");x.clearRect(0,0,c.width,c.height);$("fxSave").disabled=!f||busy;$("fxStatus").textContent=f?`${f.rects.length} fotogramas · ${f.cw} × ${f.ch} px`:(image?"La rejilla no coincide con la imagen, o supera 240 fotogramas.":"Selecciona un PNG.");if(f){const k=Math.min(c.width/f.cw,c.height/f.ch);x.imageSmoothingEnabled=false;x.drawImage(image,0,0,f.cw,f.ch,(c.width-f.cw*k)/2,(c.height-f.ch*k)/2,f.cw*k,f.ch*k);}}
+ w.onchange=async e=>{if(busy)return;if(e.target.id==="fxFile"){try{file=e.target.files[0];if(!file)return;T.assert(file.type==="image/png"||/\.png$/i.test(file.name),"Elige un PNG");T.assert(file.size<=32*1024*1024,"PNG demasiado grande");image=await createImageBitmap(file);T.assert(image.width*image.height<=16000000,"Imagen demasiado grande");if(!$("fxName").value)$("fxName").value=file.name.replace(/\.png$/i,"");}catch(error){image=null;$("fxStatus").textContent=error.message;}}preview();};
+ w.onclick=async e=>{const b=e.target.closest("[data-fx]");if(!b||busy)return;if(b.dataset.fx==="close"){if(image)image.close();closeWin();return;}if(b.dataset.fx!=="save")return;
+  const f=info(),label=$("fxName").value.trim();if(!f||!label)return Astra.ui.toast("Pon un nombre y una rejilla válida");busy=true;$("fxSave").disabled=true;
+  try{const pack=ensurePack(),key="astra_fx_"+D.fileName(label),path="img/astra/effects/"+key+".png";pack.spells=pack.spells||{};pack.spells.atlases=pack.spells.atlases||{};pack.spells.definitions=pack.spells.definitions||{};
+   if(pack.spells.definitions[key]&&!window.confirm("¿Reemplazar este efecto?"))return;
+   await p.backend.write(path,file);delete p.images[path];pack.spells.atlases[key]={path,rects:f.rects,key:null};pack.spells.definitions[key]={name:label,travel:0,chargeFrames:0,hitDelay:0,recovery:Math.max(12,Math.min(240,Math.round(f.rects.length*60/f.fps))),impact:{atlas:key,frames:f.rects.map((_,i)=>i),scale:1,mirror:false},flash:0,dim:0};
+   image.close();closeWin();done(key);Astra.ui.toast("Efecto registrado. Recuerda guardar la base de datos.");
+  }catch(error){Astra.ui.toast(error.message);}finally{busy=false;if($("fxSave"))preview();}
+ };
+};
+async function nativeFace(p,name,im){
+ const c=document.createElement("canvas");c.width=576;c.height=288;const x=c.getContext("2d");x.imageSmoothingEnabled=false;
+ const s=Math.min(144/im.width,144/im.height);const w=Math.round(im.width*s),h=Math.round(im.height*s);x.drawImage(im,Math.round((144-w)/2),144-h,w,h);
+ const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error("No pude codificar cara MZ")),"image/png"));const path="img/faces/"+name+".png";await p.backend.write(path,blob);delete p.images[path];
+}
+async function installGraphics(p,pack,ctx,data,plan,res,source,options,hint){
+ const r={portraits:0,nativeFaces:0,nativeCharacters:0,nativeTilesets:0,standing:0,moving:0,animations:0,clips:0,icons:0,assigned:0,skipped:0,warnings:[]},base="img/astra/fe8/"+source+"/";
+ const tables=R.graphicTables(ctx);r.tables=tables;
+ for(const [k,v] of Object.entries(tables))if(v<0)r.warnings.push("Tabla gráfica no localizada: "+k);
+ pack.faces=pack.faces||{};pack.units=pack.units||{};pack.atlases=pack.atlases||{};pack.clips=pack.clips||{};pack.itemIcons=pack.itemIcons||{};pack.itemIcons.weapons=pack.itemIcons.weapons||{};pack.itemIcons.items=pack.itemIcons.items||{};
+ const faceCache=new Map(),animCache=new Map(),iconCache=new Map();
+ const warn=(label,e)=>{r.skipped++;r.warnings.push(label+": "+(e&&e.message||e||"recurso no legible"));};
+ async function face(id){if(!id)return null;if(faceCache.has(id))return faceCache.get(id);const im=R.portrait(ctx,id);if(!im){faceCache.set(id,null);return null;}const path=base+"faces/"+id+".png",name="FE8_"+source+"_Face_"+id;const cv=await png(p,path,im);if(options.native)await nativeFace(p,name,cv);const f={path,width:im.width,height:im.height,fe8Source:source,fe8PortraitId:id};faceCache.set(id,{f,name});return {f,name};}
+ if(options.faces){for(const c of plan.characters){const row=p.actors[res.ids.characters[c.id]];if(!row)continue;const cls=data.classes[c.classId],id=c.portraitId||(cls&&cls.portraitId)||0;if(!id)continue;
+  if(!options.replace&&(pack.faces[row.id]&&!pack.faces[row.id].fe8Source||row.faceName&&!row.faceName.startsWith("FE8_")))continue;
+  try{hint("Retratos · "+c.name);const f=await face(id);if(!f){warn(c.name,"retrato "+id+" no legible");continue;}pack.faces[row.id]=Object.assign({name:c.name},f.f);D.set("actors",row,"faceKey",String(row.id));r.portraits++;
+   if(options.native&&(!row.faceName||row.faceName.startsWith("FE8_")||options.replace)){D.set("actors",row,"faceName",f.name);D.set("actors",row,"faceIndex",0);r.nativeFaces++;}
+  }catch(e){warn(c.name,e);}await pause();}}
+ async function animation(id){
+  if(animCache.has(id))return animCache.get(id);
+  const a=R.battleAnimation(ctx,id);if(!a){animCache.set(id,null);return null;}
+  const name="FE8_"+source+"_Anim_"+id,path=base+"battle/"+id+".png",built=R.animationPack(a,name,path);await png(p,path,built.image);pack.atlases[name]=built.atlas;
+  for(const k of Object.keys(pack.clips))if(k.startsWith(name+":")||k.startsWith(name+"_far:")||k.startsWith(name+"_idle:")||k.startsWith(name+"_far_idle:")||k.startsWith(name+"_dodge:"))delete pack.clips[k];Object.assign(pack.clips,built.clips);r.animations++;r.clips+=Object.keys(built.clips).length;
+  a.errors.forEach(e=>r.warnings.push(name+" · "+e));for(const [mode,tr] of Object.entries(a.modes))if(tr.estimatedImpact&&/normal|critical/i.test(mode))r.warnings.push(name+" · impacto estimado en "+mode);
+  const result={name,modes:a.modes,modeKeys:built.modeKeys};animCache.set(id,result);return result;
+ }
+ for(const c of plan.classes){const row=p.classes[res.ids.classes[c.id]];if(!row)continue;
+  const current=D.fields(row,"classes"),name="FE8_"+source+"_Class_"+c.id,protectedArt=current.art&&!String(current.art).startsWith("FE8_")&&!options.replace;
+  let art=Object.assign({name,clips:{}},pack.units[name]||{}),installed=false;
+  if(options.sprites&&!protectedArt){try{
+   hint("Sprites de mapa · "+c.name);let map=null,walk=null;for(let team=0;team<4;team++){
+    const sprite=R.standingSprite(ctx,c.smsId,team);if(sprite){const path=base+"map/"+c.id+"_"+team+".png";await png(p,path,sprite.image);if(!map)map={path,width:sprite.width,height:sprite.height,anchorY:sprite.anchorY,teamPaths:{}};map.teamPaths[team]=path;if(team===1)map.path=path;}
+    const moving=R.movingSprite(ctx,c.id,team);if(moving){const path=base+"map/"+c.id+"_walk_"+team+".png";await png(p,path,moving.image);if(!walk)walk={path,width:moving.width,height:moving.height,anchorY:moving.anchorY,teamPaths:{}};walk.teamPaths[team]=path;if(team===1){walk.path=path;await png(p,base+"map/"+c.id+"_moving_source.png",moving.source);walk.sourcePath=base+"map/"+c.id+"_moving_source.png";}}
+    if(options.native&&team>0&&(sprite||moving)){const native=R.nativeCharacter(sprite,moving),nativeName="$FE8_"+source+"_Class_"+c.id+"_"+team;if(native){await png(p,"img/characters/"+nativeName+".png",native,(Number(p.tileSize)||48)/16);art.nativeCharacters=art.nativeCharacters||{};art.nativeCharacters[team]=nativeName;r.nativeCharacters++;}}
+   }
+   if(map){art.map=map;r.standing++;installed=true;}else warn(c.name,"sprite de espera "+c.smsId+" no legible");if(walk){art.walk=walk;r.moving++;installed=true;}
+  }catch(e){warn(c.name,e);}}
+  if(options.battle){const defs=R.classAnimationDefs(ctx,c),assign=Object.assign({},current.battleAnimations||{});let idle="";
+   for(const d of defs){try{hint("Animaciones · "+c.name+" · "+d.id);const a=await animation(d.id);if(!a){warn(c.name,"animación "+d.id+" no legible");continue;}
+    const mode=m=>a.modeKeys[m]||null;
+    if(!idle)idle=mode("idle")||mode("farIdle")||"";
+    const item=d.byType?null:data.items[d.type],category=R.WEAPON_TYPES[d.byType?d.type:item&&item.type];
+    if(d.byType&&d.type===9){if(mode("idle"))idle=mode("idle");continue;}
+    if(!category)continue;
+    const actual=!d.byType&&res.ids.items[d.type],key=actual&&actual.kind==="weapon"?"weapon:"+actual.id:category;
+    // Keep manually configured tracks unless explicitly asked to replace them.
+    const owned=v=>v&&typeof v.normal==="string"&&v.normal.startsWith("FE8_");
+    const set=(k,normal,critical,miss)=>{if(!normal||assign[k]&&!owned(assign[k])&&!options.replace)return;assign[k]={normal};if(critical)assign[k].critical=critical;if(miss)assign[k].miss=miss;r.assigned++;};
+    set(key,mode("normal")||mode("farNormal"),mode("critical")||mode("farCritical"),mode("miss"));
+    if(mode("farNormal"))set(key+":far",mode("farNormal"),mode("farCritical"),mode("miss"));
+    if(!art.clips.normal&&(mode("normal")||mode("farNormal"))){art.clips.normal=mode("normal")||mode("farNormal");if(mode("critical"))art.clips.critical=mode("critical");if(mode("miss"))art.clips.miss=mode("miss");}
+    installed=true;
+   }catch(e){warn(c.name+" / anim "+d.id,e);}}
+   if(Object.keys(assign).length)D.set("classes",row,"battleAnimations",assign);
+   if(idle)art.idleClip=idle;
+  }
+  if(installed&&!protectedArt){pack.units[name]=art;D.set("classes",row,"art",name);}
+  await pause();
+ }
+ if(options.native){for(const c of plan.characters){const row=p.actors[res.ids.characters[c.id]],cls=p.classes[res.ids.classes[c.classId]];if(!row||!cls)continue;const art=pack.units[D.fields(cls,"classes").art],name=art&&art.nativeCharacters&&art.nativeCharacters[1];if(name&&(!row.characterName||/^\$FE8_/.test(row.characterName)||options.replace)){D.set("actors",row,"characterName",name);D.set("actors",row,"characterIndex",0);}}}
+ if(options.icons){for(const item of plan.items){const ref=res.ids.items[item.id];if(!ref)continue;const group=ref.kind==="weapon"?"weapons":"items",old=pack.itemIcons[group][ref.id];if(old&&!old.fe8Source&&!options.replace)continue;
+  try{let entry=iconCache.get(item.iconId);if(!entry){const im=R.itemIcon(ctx,item.iconId);if(!im)continue;const path=base+"icons/"+item.iconId+".png";await png(p,path,im);entry={path,rect:[0,0,16,16],fe8Source:source};iconCache.set(item.iconId,entry);}pack.itemIcons[group][ref.id]=entry;r.icons++;}catch(e){warn(item.name,e);}
+ }}
+ return r;
+}
+// Generate a real Tilesets.json record and B-E sheets. Preserve unrelated tilesets and maps.
+async function nativeMap(p,source,m,img){
+ const built=R.nativeTiles(m.chapter,img),tag="FE8_"+source+"_"+m.chapter.index,names=new Array(9).fill("");
+ for(let i=0;i<built.sheets.length;i++)if(built.sheets[i]){const name=tag+"_"+"BCDE"[i];await png(p,"img/tilesets/"+name+".png",built.sheets[i],(Number(p.tileSize)||48)/16);names[5+i]=name;}
+ const tilesets=p.tilesets,old=tilesets.find(t=>t&&t.note==="<FE8Tileset:"+tag+">");const id=old?old.id:tilesets.length||1;
+ if(!tilesets.length)tilesets.push(null);
+ tilesets[id]={id,name:"FE8 · "+m.chapter.name,mode:0,note:"<FE8Tileset:"+tag+">",tilesetNames:names,flags:built.flags};
+ m.json.tilesetId=id;m.json.parallaxName="";m.json.parallaxShow=false;
+ const n=m.json.width*m.json.height;for(let k=0;k<n;k++)m.json.data[k]=built.ids[k];
+ return built.unique;
+}
+function nativeUnits(p,pack,map){
+ for(const e of map.events.filter(Boolean)){const c=M.find(e,"Ally")||M.find(e,"Enemy")||M.find(e,"Unit");if(!c)continue;
+  const a=p.actors[c.args.actorId],id=c.args.classId||(a&&a.classId),cls=p.classes[id],art=cls&&pack.units[D.fields(cls,"classes").art],team=c.id==="Ally"?1:c.id==="Enemy"?2:Number(c.args.team)||1;
+  const name=art&&art.nativeCharacters&&art.nativeCharacters[team];if(name)Object.assign(M.page(e).image,{characterName:name,characterIndex:0,direction:2,pattern:1,tileId:0});
+ }
+}
+
+Astra.openRomImport=function(initial){
+ const p=P();if(!p)return Astra.ui.toast("Primero abre tu proyecto.");
+ const {win,closeWin}=Astra.imgTools;
+ const S={clean:null,hack:null,result:null,plan:null,busy:false,sequence:0,diagnostic:null,lastError:null,stage:"Esperando ROM",lastAction:null};
+ const w=win(`<header><h2>🎮 Importar Fire Emblem GBA · LOTE v5</h2><span class="grow"></span><button class="btn small" data-x="close">✕</button></header>
+  <div class="awbody single"><div class="romimp">
+   <p>Importa directamente tu <b>ROM de Fire Emblem: The Sacred Stones (USA)</b>: capítulos, mapas, terreno y unidades. También puedes extraer fondos y plataformas, y probar la biblioteca de animaciones de <b>FE7 USA o FE6 Japón</b>. La conversión de campañas de FE6/FE7 aún no está disponible. Si quieres importar un hack, agrega un segundo archivo para comparar sus cambios con la ROM original.</p>
+   <div class="romslots">
+    <label class="romslot" id="rsClean"><span class="ki">💾</span><b>1 · ROM GBA · Obligatoria</b><small>El .gba original, sin parchear.</small><em></em><input type="file" accept=".gba" hidden data-slot="clean"></label>
+    <label class="romslot" id="rsHack"><span class="ki">🩹</span><b>2 · Hack o parche · Opcional</b><small>Su parche .ups o .bps, o la ROM ya parcheada (.gba).</small><em></em><input type="file" accept=".ups,.bps,.gba" hidden data-slot="hack"></label>
+   </div>
+   <p class="help">También puedes arrastrar la ROM, o ambos archivos si vas a importar un hack. Todo se procesa en tu navegador: los archivos no salen de tu equipo y Astra no copia la ROM a tu proyecto. La extracción gráfica se ejecuta localmente y guarda PNG y pistas compatibles. Las animaciones especiales y los hacks con formatos no estándar pueden requerir ajustes. Usa recursos que tengas derecho a utilizar.</p>
+   <div class="card"><button type="button" class="btn small" data-x="diagnostic">📋 Descargar diagnóstico JSON</button><p class="help" style="margin-top:8px">Disponible antes de importar y después de un error. No modifica el proyecto ni incluye la ROM.</p></div>
+   <div id="riOut"></div>
+  </div></div>
+  <footer><button class="btn small" data-x="runtime" id="riRuntime">Actualizar motor gráfico MZ</button><span class="help" id="riHint"></span><span class="grow"></span><button class="btn" data-x="close">Cerrar</button><button class="btn gold" data-x="go" id="riGo" disabled>📥 Importar seleccionados</button></footer>`);
+ const hint=(t,bad)=>{if(t)S.stage=t;if(bad)S.lastError=t;const h=$("riHint");if(h){h.textContent=t;h.classList.toggle("error",!!bad);}};
+ const describeContext=ctx=>({gameCode:R.gameCode(ctx.rom),crc:R.crc32(ctx.rom).toString(16).padStart(8,"0"),size:ctx.rom.length,notes:ctx.notes||[],errors:ctx.errors||[],tables:Object.fromEntries(["characters","classes","items","chapters","assets","text"].map(k=>[k,ctx[k+"At"]??null])),huffman:ctx.huffman||null,layout:ctx.layout||null});
+ function downloadDiagnostic(){
+  const result=S.result,d=result&&result.hdata,ctx=result&&result.hctx;
+  const report={version:"GBA LOTE v5",stage:S.stage,error:S.lastError,busy:S.busy,mode:result&&result.mode,rom:S.diagnostic,preflight:result&&result.diagnostics||null,counts:d?{characters:Object.keys(d.characters).length,classes:Object.keys(d.classes).length,items:Object.keys(d.items).length,chapters:d.chapters.length}:null,chapters:d?d.chapters.map(c=>({index:c.index,name:c.name,width:c.map.width,height:c.map.height,units:c.units.length})):[],selected:result?chosen():[],action:S.lastAction,options:result?Object.fromEntries(["riData","riDraw","riFaces","riSprites","riBattle","riIcons","riNative","riReplace","riExtras","riStandaloneBattle"].map(k=>[k,!!$(k)?.checked])):null,pluginStatus:p.pluginStatus||null,resourcePack:p.packName||null,tileSize:p.tileSize||null,importResult:S.importSummary||null};
+  if(ctx)report.rom=describeContext(ctx);
+  const blob=new Blob([JSON.stringify(report,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="FE8_Diagnostico_"+(report.rom&&report.rom.crc||"sin_rom")+".json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }
+ const show=()=>{[["clean","rsClean"],["hack","rsHack"]].forEach(([k,id])=>{const el=$(id);if(!el)return;el.classList.toggle("ok",!!S[k]);el.querySelector("em").textContent=S[k]?"✔ "+S[k].name:"";});};
+ async function take(files){
+  for(const f of files){
+   if(isPatch(f))S.hack=f;
+   else if(isRom(f)){
+    // ¿Cuál es la limpia? La que tiene el CRC de FE8 USA original.
+    const head=new Uint8Array(await f.arrayBuffer());
+    if(R.crc32(head)===R.FE8U.crc)S.clean=f;else if(!S.clean&&!S.hack)S.clean=f;else if(!S.hack)S.hack=f;else S.clean=f;
+   }
+  }
+  show();if(S.clean)analyze();
+ }
+ async function bytes(f){return new Uint8Array(await f.arrayBuffer());}
+ async function analyze(){
+  if(S.busy||!S.clean)return;
+  const seq=++S.sequence;S.busy=true;$("riGo").disabled=true;$("riOut").innerHTML="";S.result=null;S.plan=null;S.diagnostic=null;S.lastError=null;S.importSummary=null;
+  try{
+   hint("Detectando juego y región GBA…");await pause();
+   const clean=await bytes(S.clean),code=R.gameCode(clean);S.diagnostic={gameCode:code,crc:R.crc32(clean).toString(16).padStart(8,"0"),size:clean.length};
+   T.assert(R.GBA_RESOURCES[code],"ROM no soportada: "+code+". Perfiles: FE8 USA, FE7 USA, FE6 Japón.");
+   if(code!==R.FE8U.code){
+    const rom=S.hack?R.applyPatch(clean,await bytes(S.hack)):clean;T.assert(R.gameCode(rom)===code,"El parche cambia el código de juego");
+    const ctx={rom,notes:[],errors:[]},extras=R.battleExtras(ctx),animationIds=R.resourceAnimationIds(ctx);
+    S.result={mode:"resources",hctx:ctx,cctx:ctx,extras,animationIds,hdata:{characters:{},classes:{},items:{},chapters:[]},diagnostics:{game:code,backgrounds:extras.backgrounds.length,platforms:extras.platforms.length,animationIds,warnings:extras.warnings}};
+    S.diagnostic=describeContext(ctx);renderResources();hint("Análisis de recursos terminado.");return;
+   }
+   const cctx=R.open(clean);S.diagnostic=describeContext(cctx);
+   if(cctx.errors.length)throw new Error(cctx.errors.join(" "));
+   // Una sola ROM: todos sus capítulos son seleccionables, sin exigir un hack.
+   // Dos archivos: se conserva la comparación original de FE8 y sus parches UPS/BPS.
+   let hctx=cctx,hdata,mode="direct";
+   if(S.hack){
+    hint("Aplicando el hack y comparando…");await pause();
+    const hack=R.applyPatch(clean,await bytes(S.hack));
+    T.assert(S.hack!==S.clean,"Selecciona dos archivos diferentes o deja el hack vacío.");
+    S.diagnostic={gameCode:R.gameCode(hack),crc:R.crc32(hack).toString(16).padStart(8,"0"),size:hack.length};hctx=R.open(hack,cctx);S.diagnostic=describeContext(hctx);
+    if(hctx.errors.length)throw new Error(hctx.errors.join(" "));
+    const cdata=R.read(cctx);await pause();
+    hdata=R.diff(cdata,R.read(hctx));mode="hack";
+   }else{
+    hint("Leyendo capítulos y datos de FE8…");await pause();
+    hdata=R.read(cctx);
+   }
+   S.diagnostic=describeContext(hctx);if(hctx.errors.length)throw new Error(hctx.errors.join(" "));
+   if(!hdata.chapters.length)throw new Error("No se encontraron capítulos legibles. Comprueba que la ROM sea FE8 USA (BE8E) y que no esté dañada.");
+   if(seq!==S.sequence)return;
+   S.result={cctx,hctx,hdata,mode};render();hint("Análisis terminado; puedes descargar el diagnóstico.");
+  }catch(e){if(seq===S.sequence)hint("✖ "+e.message,true);}
+   finally{S.busy=false;if(S.result)plan();}
+  }
+ function renderResources(){
+  const {extras,animationIds,hctx}=S.result,profile=R.GBA_RESOURCES[R.gameCode(hctx.rom)];
+  $("riOut").innerHTML=`<div class="card"><h3>${esc(profile.label)} · Solo recursos</h3><p>${extras.backgrounds.length} fondos y ${extras.platforms.length} hojas de plataforma legibles. ${animationIds.length} entradas candidatas de animación (extracción experimental).</p><p class="help">Este modo no crea mapas, personajes ni clases. Los clips se añaden a la biblioteca sin asignarlos a unidades.</p>${extras.warnings.length?`<p class="help">${extras.warnings.map(esc).join(" · ")}</p>`:""}</div><label class="chk"><input type="checkbox" id="riExtras" checked> Fondos y plataformas originales</label><label class="chk"><input type="checkbox" id="riStandaloneBattle"> Biblioteca de animaciones de batalla (experimental)</label>`;
+  if(extras.backgrounds[0]){const c=document.createElement("canvas"),im=extras.backgrounds[0].image;c.width=im.width;c.height=im.height;c.style.cssText="width:240px;image-rendering:pixelated";c.getContext("2d").putImageData(new ImageData(im.data,im.width,im.height),0,0);$("riOut").appendChild(c);}
+ }
+ async function goResources(){
+  if(S.busy)return;const bg=$("riExtras").checked,anim=$("riStandaloneBattle").checked;if(!bg&&!anim)return;
+  if(Astra.state.dirty||Astra.dbState?.dirty.size)return Astra.ui.toast("Guarda los cambios antes de importar.");
+  S.busy=true;const controls=[...w.querySelectorAll('input,button')].filter(el=>el.dataset.x!=="diagnostic"),prior=controls.map(el=>el.disabled);controls.forEach(el=>el.disabled=true);
+  try{const ctx=S.result.hctx,source=R.crc32(ctx.rom).toString(16).padStart(8,"0"),pack=Astra.db.ensurePack();
+   const extra=bg?await installExtras(p,pack,ctx,source,S.result.extras,hint):{backgrounds:0,platforms:0,warnings:[]};
+   const clips=anim?await installStandaloneAnimations(p,pack,ctx,source,S.result.animationIds,hint):{animations:0,clips:0,warnings:[]};
+   await Astra.saveFile(p,"data/"+p.packName+".json",JSON.stringify(pack));await Astra.saveFile(p,"js/plugins.js",Astra.writePlugins(p.plugins));if(Astra.dbState){Astra.dbState.dirty.delete("pack");Astra.dbState.dirty.delete("plugins");}
+   S.importSummary={source,gameCode:R.gameCode(ctx.rom),extra,clips};await Astra.saveFile(p,"data/GBA_Resources_"+source+".json",JSON.stringify(S.importSummary,null,2));Astra.refreshDatabase(p);closeWin();Astra.db.show("battleAssets");Astra.ui.modal(`<h2>Recursos importados</h2><p>${extra.backgrounds} fondos · ${extra.platforms} plataformas · ${clips.animations} animaciones · ${clips.clips} pistas.</p><p class="help">${extra.warnings.length+clips.warnings.length} avisos en data/GBA_Resources_${source}.json. No se crearon mapas.</p>`,[{label:"Vale",value:0}]);
+  }catch(e){hint("✖ "+e.message,true);}finally{S.busy=false;controls.forEach((el,i)=>el.disabled=prior[i]);if($("riGo"))plan();}
+ }
+  function render(){
+  const {cctx,hctx,hdata,mode}=S.result;
+  const direct=mode==="direct",all=hdata.chapters,changed=all.filter(c=>c.changed),same=all.length-changed.length;
+  const count=k=>Object.values(hdata[k]).filter(r=>r.changed).length;
+  const notes=[...new Set(cctx.notes.concat(hctx.notes).concat(hctx.errors))];
+  // Read a real record before any write: the user can see Eirika/character 1, class and portrait.
+  const hero=hdata.characters[1],heroClass=hero&&hdata.classes[hero.classId],tables=R.graphicTables(hctx);
+  let face=null,standing=null;try{if(hero)face=R.portrait(hctx,hero.portraitId||(heroClass&&heroClass.portraitId)||0);if(heroClass)standing=R.standingSprite(hctx,heroClass.smsId,1);}catch(e){notes.push("Prueba gráfica: "+e.message);}
+  S.result.diagnostics={character1:hero?{name:hero.name,id:hero.id,classId:hero.classId,portraitId:hero.portraitId,className:heroClass&&heroClass.name}:null,huffman:!!hctx.huffman,textAt:hctx.textAt,portrait:!!face,standingSprite:!!standing,graphicTables:tables};
+  $("riOut").innerHTML=`
+   ${notes.length?`<div class="card warn">${notes.map(n=>"⚠ "+esc(n)).join("<br>")}</div>`:""}
+   <div class="card">${direct
+    ?`<b>ROM original cargada:</b> ${all.length} capítulos detectados. Puedes importar cualquiera de ellos.`
+    :`<b>Hack detectado:</b> ${changed.length} capítulos modificados, ${count("characters")} personajes, ${count("classes")} clases y ${count("items")} objetos cambiados.`}
+    <span class="help">${direct?"No hace falta añadir un parche ni otra ROM.":same+" capítulos sin cambios también pueden seleccionarse."}</span></div>
+   <div class="card"><h3>Comprobación previa · personaje FE8 #1</h3><div style="display:flex;align-items:center;gap:14px">
+    <canvas id="riFacePreview" width="96" height="80" style="image-rendering:pixelated;background:#0a1226;border:1px solid var(--line);border-radius:6px;flex:none"></canvas>
+    <div><b>${esc(hero?hero.name:"No encontrado")}</b> · ${esc(heroClass?heroClass.name:"Clase no encontrada")}<br>
+    <small>Retrato: ${face?"legible":"no legible"} · Sprite: ${standing?"legible":"no legible"} · Textos: ${hctx.huffman?"Huffman":"sin árbol válido"}</small><br>
+    <small>CRC: ${R.hex(R.crc32(hctx.rom))}. Si no aparece el personaje correcto, no repitas la importación: revisa los detalles técnicos.</small></div></div></div>
+   <h3>Capítulos disponibles (${all.length})</h3>
+   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+    <button type="button" class="btn small" data-x="selectAll">Seleccionar todos</button>
+    <button type="button" class="btn small" data-x="selectNone">Ninguno</button>
+    ${direct?"":`<button type="button" class="btn small" data-x="selectChanged">Solo modificados</button>`}
+   </div>
+   <div class="romlist">${all.map(c=>`<label class="romrow"><input type="checkbox" data-ch="${c.index}" ${direct||c.changed?"checked":""}>
+     <b>${esc(c.name)}</b><span class="tag ${c.changed||""}">${direct?"FE8 original":c.changed==="new"?"nuevo":c.changed?"modificado":"sin cambios"}</span>
+     <small>${c.map.width}×${c.map.height} · ${c.units.length} unidades</small></label>`).join("")}</div>
+   <label class="chk"><input type="checkbox" id="riData" checked> ${direct?"Importar también todos los personajes, clases y objetos de FE8 (aunque no aparezcan en los capítulos elegidos)":"Traer también los personajes, clases y objetos que el hack cambió aunque no salgan en los capítulos"}</label>
+   <label class="chk"><input type="checkbox" id="riDraw" checked> Dibujar cada mapa con su tileset (imagen del capítulo)</label>
+   <div class="card"><h3>Recursos de FE8</h3>
+    <label class="chk"><input type="checkbox" id="riFaces" checked> Retratos de los personajes</label>
+    <label class="chk"><input type="checkbox" id="riSprites" checked> Sprites de mapa en reposo y movimiento, por equipo</label>
+    <label class="chk"><input type="checkbox" id="riBattle" checked> Animaciones de batalla por clase y arma (experimental)</label>
+    <label class="chk"><input type="checkbox" id="riIcons" checked> Iconos de armas y objetos</label>
+    <label class="chk"><input type="checkbox" id="riExtras" checked> Fondos y plataformas de batalla originales (experimental)</label>
+    <label class="chk"><input type="checkbox" id="riNative" checked> Crear tilesets editables, sprites de eventos y caras nativas de RPG Maker MZ</label>
+    <label class="chk"><input type="checkbox" id="riReplace"> Reemplazar asociaciones gráficas personalizadas existentes</label>
+    <p class="help">Importar seleccionados crea mapas nuevos, nunca reemplaza el mapa abierto. Para importar solo la BD: selecciona Ninguno y deja activada toda la BD. Haz una copia del proyecto antes.</p></div>
+    <div class="card"><h3>Reparación individual (opcional)</h3><p class="help" id="riRepairHint" aria-live="polite"></p><button type="button" class="btn small danger" data-x="repair" id="riRepairGo" disabled>Reparar mapa abierto</button></div>
+   <div class="card" id="riPlan"></div>
+   <details class="help"><summary>Detalles técnicos</summary>
+    Tablas: personajes ${R.hex(hctx.charactersAt+0x08000000)}, clases ${R.hex(hctx.classesAt+0x08000000)}, objetos ${R.hex(hctx.itemsAt+0x08000000)}, capítulos ${R.hex(hctx.chaptersAt+0x08000000)}, textos ${R.hex(hctx.textAt+0x08000000)}.
+    Textos: ${hctx.huffman?"Huffman":"sin comprimir"}. Campos del capítulo: ${esc(JSON.stringify(hctx.layout||{}))}.</details>`;
+  if(face){const c=$("riFacePreview");c.width=face.width;c.height=face.height;c.getContext("2d").putImageData(new ImageData(face.data,face.width,face.height),0,0);}
+  plan();
+ }
+ const chosen=()=>[...w.querySelectorAll("[data-ch]")].filter(i=>i.checked).map(i=>Number(i.dataset.ch));
+ function plan(){
+  if(!S.result)return;if(S.result.mode==="resources"){$("riGo").textContent="📥 Importar recursos GBA";$("riGo").disabled=S.busy||!($("riExtras")?.checked||$("riStandaloneBattle")?.checked);return;}const data=S.result.hdata,full=$("riData").checked;
+  const pl=R.plan(data,chosen(),{changedData:S.result.mode==="hack"&&full,allData:S.result.mode==="direct"&&full});
+  S.plan=pl;
+   const repairAllowed=pl.chapters.length===1&&Number(Astra.state.mapId)>0;
+   $("riRepairGo").disabled=!repairAllowed||S.busy;
+   $("riRepairHint").textContent=repairAllowed?"Acción aparte: sustituye el mapa abierto y sus eventos con el único capítulo seleccionado.":"No disponible: requiere exactamente un capítulo y un mapa abierto. La importación normal no tiene este límite.";
+  const n=pl.chapters.length+pl.characters.length+pl.classes.length+pl.items.length+($("riExtras")?.checked?1:0);
+  $("riPlan").innerHTML=`<b>Se importará</b>: ${pl.chapters.length} mapa${pl.chapters.length===1?"":"s"}, ${pl.characters.length} personajes, ${pl.classes.length} clases y ${pl.items.length} objetos y armas.
+   <span class="help">Los datos ya importados se identifican por ROM e ID de FE8. Las entradas antiguas con un nombre único se reutilizan; las asociaciones gráficas manuales se conservan por defecto.</span>`;
+   $("riGo").disabled=!n||S.busy;
+   $("riGo").textContent=pl.chapters.length?"📥 Importar "+pl.chapters.length+" mapa"+(pl.chapters.length===1?"":"s"):($("riExtras")?.checked&&!pl.characters.length&&!pl.classes.length&&!pl.items.length?"📥 Importar recursos de batalla":"📥 Importar base de datos");
+ }
+  async function go(action="append"){
+   if(S.busy||!S.result)return;if(S.result.mode==="resources")return goResources();
+   // Rebuild from the live selection immediately before importing. Never infer repair from a checkbox.
+   plan();const pl=S.plan;if(!pl||!(pl.chapters.length+pl.characters.length+pl.classes.length+pl.items.length+($("riExtras")?.checked?1:0)))return;
+   if(Astra.state.dirty||(Astra.dbState&&Astra.dbState.dirty.size)){Astra.ui.toast("Primero guarda los cambios del mapa y de la base de datos.");return;}
+   let replaceMapId=0;
+   if(action==="repair"){
+    if(pl.chapters.length!==1||Number(Astra.state.mapId)<=0){hint("La acción Reparar mapa abierto requiere exactamente un capítulo. Usa Importar seleccionados para varios mapas.",true);return;}
+    if(!window.confirm("Se sustituirán el mapa y sus eventos actuales por el capítulo FE8 seleccionado. Se guardará una copia .astra-bak. ¿Continuar?"))return;
+    replaceMapId=Number(Astra.state.mapId);
+   }
+   const draw=$("riDraw").checked,native=$("riNative").checked,extras=!!$("riExtras")?.checked;
+   const options={faces:$("riFaces").checked,sprites:$("riSprites").checked,battle:$("riBattle").checked,icons:$("riIcons").checked,native,replace:$("riReplace").checked};
+   S.busy=true;S.lastError=null;S.importSummary=null;S.lastAction=action;
+   const controls=[...w.querySelectorAll('input,button')].filter(el=>el.dataset.x!=="diagnostic");
+   const disabledBefore=controls.map(el=>el.disabled);controls.forEach(el=>el.disabled=true);
+  try{
+   T.assert(!p.pluginStatus||p.pluginStatus.ok,"Pulsa Actualizar motor gráfico MZ antes de importar.");
+   if(options.sprites||options.battle){const runtime=await p.backend.text("js/plugins/TacticsUI.js").catch(()=>"");T.assert(runtime.includes("entry.teamPaths")&&runtime.includes("weaponKey"),"Pulsa Actualizar motor gráfico MZ para instalar el lector de los nuevos recursos. Cierra MZ antes de hacerlo.");}
+   const pack=Astra.db.ensurePack();
+   hint("Creando datos y mapas…");await pause();
+   const cur=Astra.state.map||{},ctx=S.result.hctx,source=R.crc32(ctx.rom).toString(16).padStart(8,"0");
+   T.assert(!pl.chapters.length||draw,"Activa Dibujar cada mapa: no se crearán mapas con tiles de relleno.");const terrain=R.terrainMapping(Object.assign({},p.terrain,pack.terrain||{}),pl.chapters);
+   const res=R.apply(p,pl,{source,terrainIds:terrain.ids,nativePreview:draw&&native,replaceMapId,repairActors:true,template:{tilesetId:cur.tilesetId,data:cur.data}});
+   pack.maps=pack.maps||{};pack.terrain=terrain.terrain;
+   const gr=await installGraphics(p,pack,ctx,S.result.hdata,pl,res,source,options,hint),written=[];
+   if(extras){const ex=await installExtras(p,pack,ctx,source,R.battleExtras(ctx),hint);gr.backgrounds=ex.backgrounds;gr.platforms=ex.platforms;gr.warnings.push(...ex.warnings);}
+   for(const [mapIndex,m] of res.maps.entries()){
+    hint("Mapa "+(mapIndex+1)+"/"+res.maps.length+" · "+m.json.displayName+"…");await pause();
+    if(draw){const img=R.renderMap(ctx,m.chapter);
+     if(img){await png(p,m.image,img);pack.maps[m.id]={path:m.image,cell:16,width:m.json.width,height:m.json.height};written.push(m.image);
+      if(native){const count=await nativeMap(p,source,m,img);gr.nativeTilesets++;m.nativeTiles=count;}}
+     else {throw new Error(m.json.displayName+": no se pudo dibujar el mapa; no se guardará un mapa vacío. Revisa sus tileset y paleta.");}}
+    else M.setCommand(M.missionEvent(m.json,true),"Mission",{mapGraphics:"native"});
+    if(native)nativeUnits(p,pack,m.json);
+    await Astra.saveFile(p,Astra.mapPath(m.id),JSON.stringify(m.json));written.push(Astra.mapPath(m.id));
+   }
+   if(gr.nativeTilesets)await Astra.saveFile(p,"data/Tilesets.json",D.stringifyTable(p.tilesets));
+   await Astra.saveFile(p,"data/MapInfos.json",D.stringifyTable(p.mapInfos));
+   for(const t of ["actors","classes","weapons","items"]){await Astra.saveFile(p,"data/"+D.TABLES[t].file+".json",D.stringifyTable(p[t]));if(Astra.dbState)Astra.dbState.dirty.delete(t);}
+   await Astra.saveFile(p,"data/"+p.packName+".json",JSON.stringify(pack));
+   await Astra.saveFile(p,"js/plugins.js",Astra.writePlugins(p.plugins));
+   if(Astra.dbState){Astra.dbState.dirty.delete("pack");Astra.dbState.dirty.delete("plugins");}
+   const r=res.report;
+   const summary={source,counts:r,diagnostics:S.result.diagnostics,maps:res.maps.map(m=>({id:m.id,fe8Index:m.chapter.index,name:m.json.displayName,nativeTiles:m.nativeTiles||0,tilesetId:m.json.tilesetId,units:m.chapter.units.length})),graphics:gr,limitations:["No se traducen scripts narrativos, refuerzos, inventario de tiendas ni efectos de hechizo.","La orientación, el impacto y las secuencias especiales de batalla requieren verificar con la ROM real.","Los tiles de MZ son metatiles estáticos, sin autotiles ni animación de terreno GBA. La lógica de eventos sigue siendo aproximada."]};
+   S.importSummary=summary;await Astra.saveFile(p,"data/FE8_Import_"+source+".json",JSON.stringify(summary,null,2));
+   if(Astra.clearArtCache)Astra.clearArtCache();
+   if(res.maps[0])localStorage.setItem("astra.map."+p.name,String(res.maps[0].id));
+   closeWin();await Astra.open(p.backend);
+   Astra.ui.modal(`<h2>🎮 Fire Emblem importado</h2><p>${r.maps} mapa${r.maps===1?"":"s"}, ${r.units} unidades, ${r.actors} personajes, ${r.classes} clases, ${r.weapons} armas y ${r.items} objetos nuevos${r.reused?` (y ${r.reused} que ya tenías, reutilizados)`:""}.</p>
+    <p><b>Gráficos:</b> ${gr.portraits} retratos, ${gr.standing} sprites de reposo, ${gr.moving} sprites de movimiento, ${gr.animations} animaciones (${gr.clips} pistas), ${gr.assigned} asignaciones, ${gr.icons} iconos, ${gr.nativeTilesets} tilesets MZ y ${gr.nativeCharacters} hojas de personajes nativas. ${gr.backgrounds||0} fondos y ${gr.platforms||0} hojas de plataformas.</p>
+    ${gr.warnings.length?`<p class="help">⚠ ${gr.warnings.length} avisos. Informe completo: data/FE8_Import_${source}.json.</p><details><summary>Primeros avisos</summary><p class="help">${gr.warnings.slice(0,12).map(esc).join("<br>")}</p></details>`:""}
+    <p class="help">Abre MZ de nuevo. Usa «Probar misión» en ASTRA para preparar el mapa inicial de prueba, o el menú táctico «Misiones del editor» en el juego. Los mapas con aliados incluyen un evento de inicio automático. Los diálogos, refuerzos, efectos especiales y recompensas de eventos requieren conversión adicional; no se han importado.</p>`,[{label:"Vale",value:0,cls:"gold"}]);
+   }catch(e){hint("✖ "+e.message,true);}
+   finally{S.busy=false;controls.forEach((el,i)=>el.disabled=disabledBefore[i]);if($("riPlan")&&$("riRepairGo")&&S.result)plan();}
+  }
+ w.onchange=e=>{if(S.busy)return;const i=e.target;if(i.dataset.slot&&i.files[0]){
+   S[i.dataset.slot]=i.files[0];show();if(S.clean)analyze();
+   }else if(i.dataset.ch!==undefined||["riData","riExtras","riStandaloneBattle"].includes(i.id)){plan();if(S.lastError){S.lastError=null;hint("Selección actualizada.");}}};
+ async function updateRuntime(){if(S.busy)return;if(!window.confirm("Cierra RPG Maker MZ antes de continuar. ¿Instalar los plugins TacticsMZ incluidos en esta versión de ASTRA? Se guardan copias .astra-bak."))return;
+  S.busy=true;try{hint("Actualizando los plugins…");await Astra.installPlugins(p);hint("Motor gráfico actualizado. Ya puedes importar.");}catch(e){hint("✖ "+e.message,true);}finally{S.busy=false;if(S.result)plan();}}
+ const body=w.querySelector(".awin");
+ body.ondragover=e=>{e.preventDefault();};
+ body.ondrop=async e=>{e.preventDefault();if(S.busy)return;take(await Astra.droppedFiles(e.dataTransfer));};
+ w.onclick=e=>{const b=e.target.closest("[data-x]");if(!b)return;if(b.dataset.x==="diagnostic")return downloadDiagnostic();if(b.dataset.x==="close"){if(!S.busy)closeWin();return;}if(b.dataset.x==="go")return go("append");if(b.dataset.x==="repair")return go("repair");if(b.dataset.x==="runtime")return updateRuntime();
+  if(!S.busy&&["selectAll","selectNone","selectChanged"].includes(b.dataset.x)){
+   w.querySelectorAll("[data-ch]").forEach(i=>{const c=S.result&&S.result.hdata.chapters.find(c=>c.index===Number(i.dataset.ch));i.checked=b.dataset.x==="selectAll"||(b.dataset.x==="selectChanged"&&!!(c&&c.changed));});
+    plan();S.lastError=null;hint("Selección actualizada: "+S.plan.chapters.length+" capítulos.");return;
+  }};
+ if(initial&&initial.length)take(initial);
+};
+})();

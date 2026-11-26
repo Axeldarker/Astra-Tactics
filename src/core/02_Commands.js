@@ -18,6 +18,8 @@ const list=(id,label,type)=>field(id,label,"struct<"+type+">[]",[]);
 const unit=()=>n("unit","Unidad (ID del evento; 0 = activadora)");
 const target=()=>n("target","Unidad objetivo (ID del evento)");
 const xy=()=>[n("x","Casilla X"),n("y","Casilla Y")];
+// Constructores de campos compartidos: Rules, Easy y cualquier extensión los reutilizan.
+T.fields={field,n,s,b,choice,ref,list,unit,target,xy};
 const modes={add:"Sumar",set:"Fijar"};
 const kinds={weapon:"Arma",item:"Objeto"};
 const teams={0:"Cualquiera",1:"Aliados",2:"Enemigos",3:"Independientes"};
@@ -90,6 +92,9 @@ T.catalog=[
  command("OpenMenu","Abrir pantalla","Permite acceder a creador, galería, taller o almacén durante la misión.",[choice("menu","Pantalla",{animations:"Animaciones",creator:"Crear protagonista",workshop:"Taller de clases",convoy:"Almacén",status:"Estado"}),unit()]),
  command("Color","Cambiar colores RGB","Colores hexadecimales #RRGGBB.",[unit(),s("cloth","Vestimenta","#61adcf"),s("hair","Cabello","#392d35"),s("skin","Piel","#dfb797")])
 ];
+// API de extensión: añade comandos nuevos o campos a comandos existentes sin tocar el catálogo base.
+T.addCommand=(id,label,help,fields,definition)=>{T.assert(!T.catalog.some(c=>c.id===id),"Comando duplicado: "+id);const def=command(id,label,help,fields,definition);T.catalog.push(def);return def;};
+T.extendCommand=(id,fields)=>{const def=T.catalog.find(c=>c.id===id);T.assert(def,"Comando desconocido: "+id);def.fields.push.apply(def.fields,fields);return def;};
 T.decode=function(value){
  if(typeof value!=="string")return value;
  const t=value.trim();if(t==="true")return true;if(t==="false")return false;

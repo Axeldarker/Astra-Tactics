@@ -7,9 +7,8 @@
 (function(root){
 'use strict';
 const T=root.Tactics,E=T.Engine.prototype,copy=T.copy,alive=T.alive,distance=T.distance;
-const f=(id,label,type,value,options)=>({id,label,type,value,options}),num=(id,label,value)=>f(id,label,'number',value||0),str=(id,label,value)=>f(id,label,'string',value||''),bool=(id,label,value)=>f(id,label,'boolean',!!value),select=(id,label,options,value)=>f(id,label,'select',value===undefined?Object.keys(options)[0]:value,options),unit=()=>num('unit','Unidad (ID del evento; 0 = activadora)'),xy=()=>[num('x','Casilla X'),num('y','Casilla Y')];
-const add=(id,label,help,fields,definition)=>T.catalog.push({id,label,help,fields,definition:!!definition});
-const extend=(id,fields)=>T.catalog.find(c=>c.id===id).fields.push.apply(T.catalog.find(c=>c.id===id).fields,fields);
+const {field:f,n:num,s:str,b:bool,choice:select,unit,xy}=T.fields;
+const add=T.addCommand,extend=T.extendCommand;
 extend('Unit',[str('variant','Variante gráfica'),str('buildProfile','Perfil de crecimiento de la clase'),num('preLevels','Niveles previos para estadísticas'),num('constitution','Constitución (0 = BD)'),str('group','Subgrupo'),str('affinity','Afinidad')]);
 T.structures.Equipment.push(bool('drop','Dejar este objeto al caer'));
 extend('Mission',[select('mode','Tipo de mapa',{battle:'Batalla táctica',story:'Solo narrativa'},'battle'),select('mapGraphics','Gráfico del mapa',{resource:'Imagen del paquete',native:'Tiles del editor MZ'},'resource'),bool('showProgress','Mostrar EXP y ganancias de nivel',true)]);
