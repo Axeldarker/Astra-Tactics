@@ -16,7 +16,7 @@ const TOOLS=Object.assign({select:{label:"Elegir",letter:"↖",color:"#93aaad",h
  Object.fromEntries(Object.keys(M.tools).map(k=>[k,Object.assign({hint:"Clic en una casilla vacía para colocar "+M.tools[k].label.toLowerCase()},M.tools[k])])));
 
 const S={project:null,mapId:0,map:null,tileset:null,undo:[],redo:[],dirty:false,tool:"select",selected:0,brush:1,
- view:{bg:"game",terrain:false,grid:true},zoom:1,hover:null,drag:null,painting:false,last:{},preview:null,check:null};
+ view:{bg:"game",terrain:false,grid:true,eventIds:true},zoom:1,hover:null,drag:null,painting:false,last:{},preview:null,check:null};
 Astra.state=S;
 // Para database.js: refrescar todo después de tocar la base de datos.
 Astra.ui={esc,toast:(...a)=>toast(...a),modal:(...a)=>modal(...a),refresh(){Object.keys(spriteCache).forEach(k=>delete spriteCache[k]);Astra.clearArtCache();S.project.terrainColors=null;S.preview=null;if(S.map)renderAll();}};
@@ -112,18 +112,59 @@ async function save(){
  catch(e){modal(`<h2>No se pudo guardar</h2><p class="error">${esc(e.message)}</p>`,[{label:"Vale",value:0}]);}
 }
 
-// ▶ Probar misión: el navegador no puede abrir MZ, así que guarda, revisa y explica el último paso.
+// Map administration: offer a safe FE8-only scope or all maps except the explicitly selected survivor.
+async function manageMaps(){
+ const p=S.project;if(!p)return;
+ if(S.dirty||(Astra.dbState&&Astra.dbState.dirty.size))return toast("Guarda los cambios antes de limpiar mapas.");
+ if(typeof p.backend.removeMap!=="function")return toast("Abre un proyecto local para administrar sus mapas.");
+ try{
+  const rows=await Astra.inspectProjectMaps(p),imported=rows.filter(m=>m.imported),base=rows.find(m=>!m.imported)||rows[0];
+  if(rows.length<=1)return toast("Hay un solo mapa. ASTRA conserva siempre al menos uno.");
+  // Two scopes, with a selectable map to preserve in the complete cleanup.
+  const mode=await modal(`<h2>🗺 Administrar mapas</h2><p>${rows.length} mapas · ${imported.length} con etiqueta de importación FE8.</p><p>La limpieza de FE8 conserva los mapas propios. Las importaciones de versiones antiguas sin etiqueta pueden requerir la limpieza completa.</p><p class="help">Se realizará un respaldo antes de borrar. No se eliminan personajes, clases, tilesets, animaciones ni imágenes compartidas.</p>`,[{label:"Cancelar",value:""},{label:"Limpiar FE8",value:"fe8"},{label:"Limpiar todos salvo uno",value:"all",cls:"danger"}]);
+  if(!mode)return;
+  let keep=base.id;
+  if(mode==="all"||imported.length===rows.length){
+   const choose=modal(`<h2>Mapa que se conservará</h2><p>Selecciona el mapa que no quieres borrar.</p><label class="field wide"><select id="purgeKeep">${rows.map(m=>`<option value="${m.id}"${m.id===keep?" selected":""}>${m.id} · ${esc(m.name)}</option>`).join("")}</select></label>`,[{label:"Cancelar",value:false},{label:"Continuar",value:true,cls:"gold"}]);
+   const select=$("purgeKeep");if(!await choose)return;keep=Number(select.value);
+  }
+  const gone=(mode==="fe8"?imported:rows).filter(m=>m.id!==keep);
+  if(!gone.length)return toast("No hay mapas importados que eliminar.");
+  const confirmed=await modal(`<h2>Confirmar eliminación</h2><p>Se eliminarán <b>${gone.length} mapas</b> de <b>${esc(p.name)}</b>. Se conservarán ${rows.length-gone.length}, incluido el mapa ${keep}.</p><p class="error">Cierra RPG Maker MZ antes de aceptar. Los eventos de mapas conservados que enlacen a mapas borrados deberán revisarse.</p><p class="help">Se guardará un respaldo independiente en astra_backups/ antes de modificar los archivos.</p>`,[{label:"Cancelar",value:false},{label:"Eliminar "+gone.length+" mapas",value:true,cls:"danger"}]);
+  if(!confirmed)return;
+  toast("Creando respaldo y limpiando mapas…");const r=await Astra.purgeProjectMaps(p,rows,gone.map(m=>m.id),keep);
+  localStorage.setItem("astra.map."+p.name,String(r.keepId));await open(p.backend);
+  await modal(`<h2>Mapas depurados</h2><p>${r.deleted} mapas retirados del proyecto; ${r.remaining} conservados.</p><p class="help">Respaldo: <code>${esc(r.folder)}</code></p>${r.failures.length?`<p class="error">${r.failures.length} archivos quedaron sin borrar del disco, aunque ya no figuran en la lista.</p>`:""}<p class="help">Abre nuevamente MZ sin guardar su copia anterior del proyecto.</p>`,[{label:"Vale",value:0,cls:"gold"}]);
+ }catch(e){await modal(`<h2>No se pudo depurar</h2><p class="error">${esc(e.message)}</p>`,[{label:"Vale",value:0}]);}
+}
+// ▶ Probar misión: prepare the MZ start map and the native tactical entry point on request.
 async function playtest(){
  if(!S.map)return;if(S.dirty){await save();if(S.dirty)return;}
- const c=S.check||M.check(S.map,S.mapId),name=(($("mapSelect").selectedOptions||[])[0]||{}).text||"";
- modal(`<h2>▶ Probar misión</h2>${c.ok?`<p>✔ <b>${esc(name)}</b> está guardado y la misión está lista${c.warnings.length?` (con ${c.warnings.length} aviso${c.warnings.length===1?"":"s"})`:""}.</p>`:`<p class="error">✖ Antes de probar, arregla esto: ${esc(c.error)}</p>`}
-  ${c.warnings.map(w=>`<p class="help">⚠ ${esc(w)}</p>`).join("")}
-  <ol class="steps2"><li>Abre el proyecto en <b>RPG Maker MZ</b>. Si ya estaba abierto, vuelve a abrirlo <b>sin guardar</b> (Archivo → Abrir proyecto), o MZ pisará lo que guardó Astra.</li>
-  <li>Pulsa <b>▶ Reproducir prueba</b> (Ctrl+R) y entra en este mapa: la misión empieza sola.</li></ol>
-  <p class="help">Astra funciona en el navegador y no puede abrir MZ por ti; por eso deja todo guardado y revisado.</p>`,[{label:"Entendido",value:0,cls:"gold"}]);
+ const c=M.check(S.map,S.mapId),name=(($('mapSelect').selectedOptions||[])[0]||{}).text||"",p=S.project;
+ let previewError="",spawned=0;
+ try{if(c.ok){const mission=T.compileMap(T.copy(S.map),S.mapId),engine=new T.Engine(p.db,mission);spawned=engine.s.units.filter(u=>u.team===1&&T.alive(u)).length;T.assert(mission.mode==="story"||spawned>0,"No hay aliados desplegables en el motor (revisa terreno y clases).");}}catch(e){previewError=e.message;}
+ const hasAllies=!!(c.ok&&c.summary.allies>0&&!previewError);
+ const prepare=await modal(`<h2>▶ Probar misión</h2>${c.ok?`<p>✔ <b>${esc(name)}</b> compila correctamente.</p>`:`<p class="error">✖ ${esc(c.error)}</p>`}
+ ${c.warnings.map(w=>`<p class="help">⚠ ${esc(w)}</p>`).join("")}${previewError?`<p class="error">Motor: ${esc(previewError)}</p>`:`<p class="help">Motor local: ${spawned} aliados desplegables.</p>`}
+ <p>En MZ puedes iniciar una misión desde <b>Misiones del editor</b>, en el menú táctico del título.</p><p>También puedes preparar una prueba directa: ASTRA agrega el evento <b>Iniciar batalla</b> si falta y cambia el mapa de inicio de una Nueva partida a este mapa.</p><p class="help">Cierra MZ antes de preparar; se verifican y actualizan los plugins incluidos si no coinciden, y se respaldan el mapa y System.json. El cambio de inicio es persistente hasta que lo cambies de nuevo.</p>`,[{label:"Cerrar",value:false},...(hasAllies?[{label:"Preparar prueba directa",value:true,cls:"gold"}]:[])]);
+ if(!prepare)return;
+ try{
+  const files=window.ASTRA_PLUGINS||{};let mismatch=!p.pluginStatus.ok;
+  for(const [name,content] of Object.entries(files)){if(await p.backend.text("js/plugins/"+name).catch(()=>"")!==content)mismatch=true;}
+  if(mismatch)await Astra.installPlugins(p);
+  const map=T.copy(S.map),system=T.copy(p.system);M.Rom.ensureMissionStart(map);
+  map.note=(map.note||"").replace(/<AstraDirectStart>/g,"")+"\n<AstraDirectStart>";
+  const allies=(map.events||[]).filter(Boolean).filter(e=>M.find(e,"Ally")||Number(M.find(e,"Unit")?.args.team)===1),mission=M.missionEvent(map,true),ma=M.find(mission,"Mission").args;
+  const leader=allies.find(e=>e.id===Number(ma.leader))||allies.find(e=>M.find(e,"Ally")?.args.lord)||allies[0];
+  if(leader){const protagonist=allies.some(e=>e.id===Number(ma.protagonist))?Number(ma.protagonist):leader.id;M.setCommand(mission,"Mission",{leader:leader.id,protagonist});}
+  const ally=(map.events||[]).filter(Boolean).find(e=>M.find(e,"Ally")||Number(M.find(e,"Unit")?.args.team)===1);
+  system.startMapId=S.mapId;system.startX=ally?ally.x:0;system.startY=ally?ally.y:0;
+  await Astra.saveFile(p,Astra.mapPath(S.mapId),JSON.stringify(map));await Astra.saveFile(p,"data/System.json",JSON.stringify(system));
+  p.system=system;S.map=map;S.preview=null;renderAll();
+  await modal(`<h2>Prueba preparada</h2><p>Abre nuevamente RPG Maker MZ, ejecuta la prueba y elige <b>Nueva partida</b>. Debe abrir la batalla de ${esc(name)} con el motor LOTE v5. No uses una partida guardada anterior.</p><p class="help">Si hay error, pulsa F8 en el playtest y comparte el mensaje de la consola.</p>`,[{label:"Vale",value:0,cls:"gold"}]);
+ }catch(e){await modal(`<h2>No se pudo preparar</h2><p class="error">${esc(e.message)}</p>`,[{label:"Vale",value:0}]);}
 }
 
-// ---------- render general ----------
 function renderAll(){if(!S.map)return;S.check=M.check(S.map,S.mapId);renderTop();renderPalette();renderInspector();drawOverlay();}
 function renderTop(){
  $("undoBtn").disabled=!S.undo.length;$("redoBtn").disabled=!S.redo.length;
@@ -152,6 +193,7 @@ function setTool(k){S.tool=k;if(k==="terrain")S.view.terrain=true;if(k==="ally"|
 function panelFor(e){const unit=e&&["enemy","ally"].indexOf(M.kind(e))>=0;if(S.tool==="terrain"||(e&&!unit))return "props";return S.panel||"units";}
 function renderInspector(){
  const body=$("inspectorBody"),p=S.project;let html="";
+ const bodyScroll=body.scrollTop,oldList=body.querySelector(".ulist"),listScroll=oldList?oldList.scrollTop:0;
  if(p.pluginStatus.legacy||p.pluginStatus.missing)html+=`<div class="banner warn">⚠ ${p.pluginStatus.missing?"Falta TacticsMZ en este proyecto.":"Proyecto con TacticsMZ 0.2."} <button class="btn small" data-act="upgrade">Actualizar</button></div>`;
  p.warnings.forEach(w=>html+=`<div class="banner info">ℹ ${esc(w)}</div>`);
  const e=S.map.events[S.selected],panel=panelFor(e);
@@ -162,7 +204,7 @@ function renderInspector(){
   if(e)html+=selectionHtml(e);else if(S.tool!=="terrain")html+=emptyHtml();
   if(S.check&&(!S.check.ok||S.check.warnings.length))html+=`<div class="card"><h3>Revisión de la misión</h3>${!S.check.ok?`<p class="error">✖ ${esc(S.check.error)}</p>`:""}${S.check.warnings.map(w=>`<p class="help">⚠ ${esc(w)}</p>`).join("")}</div>`;
  }
- body.innerHTML=html;drawHero();Astra.paintIcons(body);
+ html+=`<datalist id="astraEventIds">${(S.map.events||[]).filter(Boolean).map(ev=>`<option value="${ev.id}">${esc(ev.name||"Evento "+ev.id)}</option>`).join("")}</datalist>`;body.innerHTML=html;body.scrollTop=bodyScroll;const list=body.querySelector(".ulist");if(list)list.scrollTop=listScroll;drawHero();Astra.paintIcons(body);
 }
 // Resumen de la unidad elegida (como en la batalla): retrato, clase, nivel, PV y arma.
 function selectedUnitHtml(e){
@@ -170,9 +212,9 @@ function selectedUnitHtml(e){
  const ally=M.kind(e)==="ally",actorId=c&&Number(c.args.actorId)||0,m=M.markers(S.map).find(x=>x.id===e.id)||{};
  const name=u&&u.name||(actorId&&(p.actors[actorId]||{}).name)||M.describe(e),cls=names(p.classes,u?u.classId:(c&&c.args.classId)||(actorId&&(p.actors[actorId]||{}).classId)||0),lv=u?u.level:c&&c.args.level||1;
  const hp=u?u.hp:0,max=u&&eng?eng.value(u,"health"):0,item=u&&u.inventory[u.equipped],w=item&&eng?eng.itemData(item):null;
- const portrait=ally&&actorId?`<canvas class="selport" width="96" height="96" data-actor="${actorId}"></canvas>`:`<canvas class="selport" id="heroCanvas" width="96" height="96"></canvas>`;
+ const portrait=actorId?`<canvas class="selport" width="96" height="96" data-actor="${actorId}"></canvas>`:`<canvas class="selport" id="heroCanvas" width="96" height="96"></canvas>`;
  return `<div class="selcard"><div class="ribbon">UNIDAD SELECCIONADA</div><div class="selbody">${portrait}<div class="selinfo">
-  <b class="selname">${esc(name)}</b><span class="selsub">${esc(cls)} · Nv. ${esc(lv)}</span>
+  <b class="selname">${esc(name)}</b><span class="eventIdLabel">EVENTO #${e.id}</span><span class="selsub">${esc(cls)} · Nv. ${esc(lv)}</span>
   <span class="selteam ${ally?"ally":"foe"}"><img src="${Astra.pixelUrl(ally?"ally":"enemy",32)}" alt="">${ally?(m.lord?"Aliado · Líder":"Aliado"):(m.boss?"Enemigo · Jefe":"Enemigo")}</span>
   ${max?`<span class="selhp"><b>PV</b> ${hp} / ${max}<i><em style="width:${Math.round(Math.min(1,hp/max)*100)}%"></em></i></span>`:""}
   ${w?`<span class="selweapon">${item.kind==="weapon"||item.kind==="item"?`<canvas width="20" height="20" data-item="${item.kind}:${item.id}"></canvas>`:""}${esc(w.name)}</span>`:""}
@@ -215,7 +257,7 @@ function terrainHtml(){
 }
 function selectionHtml(e){
  const cmds=M.commands(e),kind=M.kind(e),unit=cmds.find(c=>["Enemy","Ally","Unit"].indexOf(c.id)>=0);
- let html=`<div class="card"><div class="hero"><canvas id="heroCanvas" width="72" height="72"></canvas><div><div class="name">${esc(M.describe(e))}</div><div class="sub">Evento ${e.id} · casilla ${e.x}, ${e.y}</div>${unit?`<div class="chips" style="margin-top:6px">${Object.keys(M.addons).filter(id=>!M.find(e,id)).map(id=>`<button class="btn small" data-add="${id}">+ ${M.addons[id]}</button>`).join("")}</div>`:""}</div></div>${unit?statsHtml(e):""}
+ let html=`<div class="card"><div class="hero">${unit&&Number(unit.args.actorId)?`<canvas data-actor="${Number(unit.args.actorId)}" width="72" height="72"></canvas>`:`<canvas id="heroCanvas" width="72" height="72"></canvas>`}<div><div class="name">${esc(M.describe(e))}</div><div class="sub"><strong class="eventIdLabel">EVENTO #${e.id}</strong> · casilla ${e.x}, ${e.y}</div>${unit?`<div class="chips" style="margin-top:6px">${Object.keys(M.addons).filter(id=>!M.find(e,id)).map(id=>`<button class="btn small" data-add="${id}">+ ${M.addons[id]}</button>`).join("")}</div>`:""}</div></div>${unit?statsHtml(e):""}
   <div class="chips" style="margin-top:10px">${kind&&kind!=="mission"?`<button class="btn small danger" data-act="delete">🗑 Borrar</button>`:""}${kind==="mission"?"":`<button class="btn small" data-act="duplicate" title="Elige una casilla para la copia">⧉ Duplicar</button>`}</div></div>`;
  if(!cmds.length)html+=`<div class="card"><p class="help">Este evento no tiene comandos de TacticsMZ. Edítalo en el editor de MZ.</p></div>`;
  cmds.forEach(c=>{const def=T.catalog.find(d=>d.id===c.id),removable=M.addons[c.id];
@@ -236,6 +278,7 @@ function fieldHtml(cmd,f,v){
  if(f.type==="select")input=`<select ${key}>${Object.keys(f.options).map(k=>opt(k,f.options[k],String(v)===k)).join("")}</select>`;
  else if(table)input=`<select ${key}>${opt(0,"— ninguno —",!Number(v))}${table.filter(r=>r&&r.name).map(r=>opt(r.id,r.id+" · "+r.name,Number(v)===r.id)).join("")}</select>`;
  else if(sys)input=`<select ${key}>${opt(0,"— ninguno —",!Number(v))}${sys.map((n,i)=>i?opt(i,i+" · "+(n||"(sin nombre)"),Number(v)===i):"").join("")}</select>`;
+ else if(f.type==="number"&&["leader","protagonist","unit","target","first","second","by","recruit","template","event"].includes(f.id))input=`<span class="eventIdField"><input type="number" ${key} list="astraEventIds" value="${esc(v)}" title="ID de evento del mapa (no ID de personaje de F9)"><small class="eventIdLabel">${Number(v)>0?esc((S.map.events[Number(v)]||{}).name||"Evento no encontrado"):"0 · automático/ninguno"}</small></span>`;
  else if(f.type==="map")input=`<select ${key}>${opt(0,"— ninguno —",!Number(v))}${(p.mapInfos||[]).filter(Boolean).map(m=>opt(m.id,m.id+" · "+m.name,Number(v)===m.id)).join("")}</select>`;
  else if(f.type==="number")input=`<input type="number" ${key} value="${esc(v)}">`;
  else if(/^struct/.test(f.type))return `<label class="field wide">${esc(f.label)} <span class="help">(avanzado, JSON)</span><textarea ${key}>${esc(JSON.stringify(v))}</textarea></label>`;
@@ -319,7 +362,8 @@ function drawOverlay(){
   ctx.textBaseline="alphabetic";ctx.font="bold 11px sans-serif";ctx.lineWidth=3;ctx.strokeStyle="#081419";
   const tag=(text,tx,ty,color,align)=>{ctx.textAlign=align;ctx.strokeText(text,tx,ty);ctx.fillStyle=color;ctx.fillText(text,tx,ty);};
   if(m.level)tag(String(m.level),x+tw-3,y+tw-3,"#ffffff","right");
-  if(m.badge)tag("⏱"+m.badge,x+2,y+11,"#f3d79b","left");
+  if(S.view.eventIds&&unit){ctx.font="bold "+Math.max(11,Math.round(tw*.26))+"px sans-serif";const label="#"+m.id,ww=ctx.measureText(label).width+8;ctx.fillStyle="rgba(10,18,38,.90)";ctx.fillRect(x+1,y+1,ww,Math.max(15,tw*.29+4));ctx.lineWidth=1;ctx.strokeStyle=selected?"#f3d79b":m.color;ctx.strokeRect(x+1.5,y+1.5,ww-1,Math.max(15,tw*.29+4)-1);ctx.fillStyle="#fff0c7";ctx.textAlign="left";ctx.fillText(label,x+5,y+Math.max(12,tw*.27+2));ctx.font="bold 11px sans-serif";ctx.lineWidth=3;ctx.strokeStyle="#081419";}
+  if(m.badge)tag("⏱"+m.badge,x+2,y+(S.view.eventIds&&unit?tw*.57:11),"#f3d79b","left");
   if(m.boss)tag("♛",x+tw-3,y+12,"#ff9b9e","right");else if(m.lord)tag("♛",x+tw-3,y+12,"#8fe0f5","right");
   if(m.recruit)tag("💬",x+2,y+tw-3,"#8fdcaa","left");
   if(selected){const k=tw*.3;ctx.strokeStyle="#ffd45e";ctx.lineWidth=3;ctx.shadowColor="#000";ctx.shadowBlur=3;ctx.beginPath();
@@ -422,6 +466,7 @@ window.addEventListener("resize",()=>{if(S.map)applyZoom();});
 
 // ---------- arranque ----------
 function boot(){
+ const idStyles=document.createElement("style");idStyles.textContent=".eventIdLabel{display:inline-block;max-width:100%;font-weight:700;color:var(--gold2);font-size:11px;line-height:1.35}.eventIdField{display:flex;flex-direction:column;gap:3px;min-width:0}.eventIdField small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.selinfo .eventIdLabel{align-self:flex-start;border:1px solid var(--frame);border-radius:4px;padding:2px 6px;background:#0a1226}";document.head.appendChild(idStyles);
  $("palette").addEventListener("click",ev=>{const b=ev.target.closest("[data-tool]");if(b)setTool(b.dataset.tool);});
  $("viewbar").addEventListener("click",ev=>{const b=ev.target.closest("button");if(!b||!S.map)return;
   if(b.dataset.view){S.view.bg=b.dataset.view;drawBase();renderTop();}
@@ -440,6 +485,8 @@ function boot(){
  $("inspectorBody").addEventListener("input",ev=>{if(ev.target.id!=="rosterFind")return;S.rosterFind=ev.target.value;const q=S.rosterFind.trim().toLowerCase();
   $("inspectorBody").querySelectorAll(".urow").forEach(r=>r.classList.toggle("hidden",!!q&&r.dataset.find.indexOf(q)<0));});
  $("playBtn").onclick=playtest;
+ const ids=document.createElement("button");ids.className="tgl";ids.dataset.toggle="eventIds";ids.title="Mostrar u ocultar números de evento en el mapa";ids.innerHTML="<span>IDs</span><i></i>";$("viewbar").insertBefore(ids,$("viewbar").querySelector(".grow"));
+ const mapsBtn=document.createElement("button");mapsBtn.id="manageMapsBtn";mapsBtn.className="btn small";mapsBtn.textContent="🗺 Mapas";mapsBtn.title="Administrar y depurar mapas con respaldo";mapsBtn.onclick=manageMaps;$('mission').insertBefore(mapsBtn,$('light'));
  $("inspectorBody").addEventListener("click",onInspectorClick);$("inspectorBody").addEventListener("change",onInspectorChange);
  $("mapSelect").addEventListener("change",ev=>loadMap(Number(ev.target.value)));
  $("undoBtn").onclick=undo;$("redoBtn").onclick=redo;$("saveBtn").onclick=save;

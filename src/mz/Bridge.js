@@ -1,4 +1,3 @@
-/* TacticsMZ | Copyright (c) 2026 TacticsMZ contributors | MIT License */
 (function(root){
 "use strict";
 const T=root.Tactics;
@@ -15,6 +14,8 @@ T.setEnemyPresets(T.decode(pluginParams.EnemyPresets||"[]"));
 const resourceName=String(pluginParams.ResourcePack||"");
 if(resourceName){T.assert(/^[a-zA-Z0-9_/-]+$/.test(resourceName),"Nombre de paquete gráfico inválido");DataManager._databaseFiles.push({name:"$dataTacticsGraphics",src:resourceName+".json"});}
 let active=null,pending=null,opening=false,resume=false;
+const autoOpened=new Set();
+T.astraRuntime="LOTE-v5";
 const database=()=>{const db=T.readDatabase({classes:$dataClasses,actors:$dataActors,weapons:$dataWeapons,items:$dataItems,skills:$dataSkills,states:$dataStates});db.tilesets=T.copy(root.$dataTilesets||[]);if(root.$dataTacticsGraphics){db.graphics=T.copy(root.$dataTacticsGraphics);if(db.graphics.terrain)db.terrain=db.graphics.terrain;}return db;};
 function synchronize(){
  if(!active)return;const s=active.s;$gameParty._gold=s.gold;
@@ -22,19 +23,29 @@ function synchronize(){
  Object.keys(s.self).forEach(k=>{const a=k.split(":");$gameSelfSwitches.setValue([s.map.id,Number(a[0]),a[1]],s.self[k]);});
 }
 function loadMap(id){return new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open("GET","data/Map"+String(id).padStart(3,"0")+".json");xhr.onload=()=>{try{if(xhr.status>=400)throw new Error("Mapa no encontrado: "+id);resolve(T.compileMap(JSON.parse(xhr.responseText),id));}catch(e){reject(e);}};xhr.onerror=()=>reject(new Error("No se pudo leer mapa "+id));xhr.send();});}
+function enterCompiled(map,continuation){
+ if(continuation&&active)active.nextMission(map);else{
+  const next=new T.Engine(database(),map);
+  if(map.mode!=="story")T.assert(next.s.units.some(u=>u.team===1&&T.alive(u)),"La misión no tiene aliados desplegables. Revisa clases, terreno y unidades en ASTRA.");
+  ($gameSwitches._data||[]).forEach((v,k)=>next.s.flags[k]=v);($gameVariables._data||[]).forEach((v,k)=>next.s.vars[k]=v);active=next;
+ }
+ pending=active;SceneManager.goto(Scene_Tactics);
+ console.info("[ASTRA v5] Escena táctica",map.id,map.title,active.s.units.length);
+}
+function launchError(error){opening=false;console.error("[ASTRA v5] Error al iniciar misión",error);if(typeof SceneManager.catchException==="function")SceneManager.catchException(error);else throw error;}
 function open(id,continuation){
  if(opening)return;opening=true;
- loadMap(id).then(map=>{
-  if(continuation&&active)active.nextMission(map);else{
-   active=new T.Engine(database(),map);$gameSwitches._data.forEach((v,k)=>active.s.flags[k]=v);$gameVariables._data.forEach((v,k)=>active.s.vars[k]=v);
-  }
-  pending=active;opening=false;SceneManager.goto(Scene_Tactics);
- }).catch(error=>{opening=false;SceneManager.catchException(error);});
+ loadMap(id).then(map=>{try{enterCompiled(map,continuation);}finally{opening=false;}}).catch(launchError);
 }
 T.openMission=open;T.activeEngine=()=>active;
+T.openMissionFromMap=function(raw,id){
+ if(opening)return false;opening=true;
+ try{enterCompiled(T.compileMap(raw,id),false);return true;}catch(error){launchError(error);return false;}finally{opening=false;}
+};
+T.shouldAutoStart=function(raw){return !!raw&&(/<AstraDirectStart>/i.test(raw.note||"")||(raw.events||[]).some(e=>e&&/<AstraAutoStart>/i.test(e.note||"")));};
 T.catalog.forEach(def=>PluginManager.registerCommand("TacticsMZ",def.id,function(args){
  const a=T.args(def.id,args);
- if(def.id==="Start"){open(a.mapId||$gameMap.mapId(),false);this.setWaitMode("tactics");}
+ if(def.id==="Start"){const id=a.mapId||$gameMap.mapId(),e=$gameMap.event(this.eventId()),tag=e&&e.event&&/<AstraAutoStart>/i.test(e.event().note||"");if(tag&&autoOpened.has(id))return;if(tag)autoOpened.add(id);open(id,false);this.setWaitMode("tactics");}
  else if(active&&!def.definition)active.command(def.id,a,{event:this.eventId(),context:{},branches:[]});
 }));
 const interpreterWait=Game_Interpreter.prototype.updateWaitMode;
@@ -58,9 +69,16 @@ DataManager.makeSaveContents=function(){const contents=make.call(this);if(active
 const extract=DataManager.extractSaveContents;
 DataManager.extractSaveContents=function(contents){extract.call(this,contents);active=contents.tactics?new T.Engine(database(),null,contents.tactics):null;resume=!!active;};
 const setup=DataManager.setupNewGame;
-DataManager.setupNewGame=function(){active=null;pending=null;resume=false;setup.call(this);};
+DataManager.setupNewGame=function(){active=null;pending=null;resume=false;opening=false;autoOpened.clear();setup.call(this);};
 const mapStart=Scene_Map.prototype.start;
-Scene_Map.prototype.start=function(){mapStart.call(this);if(resume&&active){resume=false;pending=active;SceneManager.goto(Scene_Tactics);}};
+Scene_Map.prototype.start=function(){
+ mapStart.call(this);
+ if(resume&&active){resume=false;pending=active;SceneManager.goto(Scene_Tactics);return;}
+ const id=$gameMap.mapId();
+ if(!opening&&!autoOpened.has(id)&&T.shouldAutoStart(root.$dataMap)){
+  autoOpened.add(id);T.openMissionFromMap(root.$dataMap,id);
+ }
+};
 const titleCommands=Window_TitleCommand.prototype.makeCommandList;
 Window_TitleCommand.prototype.makeCommandList=function(){titleCommands.call(this);this.addCommand("Animaciones","tacticsAnimations");};
 const titleWindow=Scene_Title.prototype.createCommandWindow;

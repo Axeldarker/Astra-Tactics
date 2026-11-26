@@ -66,3 +66,15 @@ const er=project.actors[result.ids.characters[1]];er.name='Personaje 1';er.class
 const renamed={...character,name:'Eirika'},data2={...data,characters:{1:renamed}};
 const fixed=R.apply(project,R.plan(data2,[0],{allData:true}),{source:'test',replaceMapId:1,repairActors:true});assert.equal(fixed.maps[0].id,1);assert.equal(project.mapInfos.filter(Boolean).length,1);assert.equal(er.name,'Eirika');assert.equal(er.classId,result.ids.classes[1]);
 console.log('OK: Huffman Eirika, filtro de cinemáticas, REDA, mosaicos MZ (reconstrucción RGBA exacta), hoja nativa y reparación de mapa.');
+// Regression: vanilla fake-compression header counts itself; physical table begins at ID 1.
+const rawRom=new Uint8Array(0x1000000),rawAt=0x810000,rawPal=0x80E000,faceTable=0x8ACBE0;
+u32(rawRom,rawAt,(0x1400+4)<<8);rawRom.fill(0x11,rawAt+4,rawAt+4+0x1400);u16(rawRom,rawPal+2,31);
+for(let i=0;i<12;i++){u32(rawRom,faceTable+i*28,0x08000000+rawAt);u32(rawRom,faceTable+i*28+8,0x08000000+rawPal);}
+u32(rawRom,0x5524,0x08000000+faceTable-28);
+const rawCtx={rom:rawRom,crc:R.FE8U.crc};assert.equal(R.graphicTables(rawCtx).faces,faceTable-28);const eirika=R.portrait(rawCtx,2);assert(eirika);assert.equal(eirika.width,96);assert.equal(eirika.height,80);assert.equal(eirika.data[(10*96+16)*4+3],255);
+// A mission configuration is not an MZ entry point; a separate autorun is now generated.
+const m=fixed.maps[0].json,starts=m.events.filter(Boolean).filter(e=>T.Editor.find(e,'Start'));
+assert.equal(starts.length,1);assert.equal(starts[0].pages[0].trigger,3);assert.equal(starts[0].pages[0].list.find(c=>c.code===357).parameters[1],'Start');assert.equal(starts[0].pages[1].conditions.selfSwitchValid,true);assert.equal(R.ensureMissionStart(m).created,false);assert.equal(T.Editor.check(m,1).ok,true);
+const importedDB=T.readDatabase({actors:project.actors,classes:project.classes,items:project.items,weapons:project.weapons});importedDB.terrain=tm.terrain;
+const battle=new T.Engine(importedDB,T.compileMap(m,1));assert(battle.s.units.some(u=>u.team===1));
+console.log('OK: retrato FE8U tipo 0 con cabecera inclusiva, evento MZ de inicio automático y compilación/arranque del motor con una misión sintética.');

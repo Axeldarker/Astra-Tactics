@@ -6,7 +6,7 @@
 const Astra=window.Astra,T=window.Tactics,D=T.Editor.Db;
 const $=id=>document.getElementById(id);
 const esc=s=>Astra.ui.esc(s);
-const DB=Astra.dbState={open:false,tab:"actors",sel:{},filter:"",dirty:new Set(),mode:"normal"};
+const DB=Astra.dbState={open:false,tab:"actors",sel:{},filter:"",dirty:new Set(),mode:"normal",listScroll:{}};
 const P=()=>Astra.state.project;
 const TABS=[
  {id:"actors",label:"Personajes",icon:"🧑",table:"actors",help:"Los personajes jugables de F9: clase, nivel, inventario y estadísticas propias."},
@@ -19,7 +19,9 @@ const TABS=[
  {id:"movement",label:"Tabla de movimiento",icon:"🥾",help:"Coste de cada terreno para cada tipo de movimiento. Vacío = coste base. 0 = no puede pasar."},
  {id:"teams",label:"Colores de equipo",icon:"🎨",help:"Colores con los que se pinta cada equipo en el mapa y en la batalla."},
  {id:"presets",label:"Enemigos rápidos",icon:"👾",help:"Plantillas para ★ Enemigo: defines el tipo una vez y lo usas por nombre."},
- {id:"anims",label:"Animaciones",icon:"🎞",help:"Animaciones de batalla del paquete de gráficos. Importa hojas PNG o paquetes de FE Essentials."}
+ {id:"anims",label:"Animaciones",icon:"🎞",help:"Animaciones de batalla del paquete de gráficos. Importa hojas PNG o paquetes de FE Essentials."},
+ {id:"battleAssets",label:"Fondos y plataformas",icon:"▧",help:"Recursos de batalla extraídos de GBA. Selecciona uno y actívalo como fondo o plataforma del proyecto."},
+ {id:"effects",label:"Battle Effects",icon:"✦",help:"Registra efectos visuales a partir de hojas PNG y asígnalos a armas. No ejecuta scripts originales de GBA."}
 ];
 const tab=()=>TABS.find(t=>t.id===DB.tab);
 const TEAM_NAMES=["Ya actuó (gris)","Jugador","Enemigo","Otro / NPC","Extra"];
@@ -77,6 +79,8 @@ function entries(){
   case "terrain":return terrainIds().map(id=>{const r=p.terrain[id];return {id,label:id+" · "+(r.name||""),sub:r.cost>0?"coste "+r.cost+(r.defense?" · def +"+r.defense:"")+(r.avoid?" · eva +"+r.avoid:""):"intransitable",icon:`<b class="sw" style="background:${esc(r.color||"#667f60")}"></b>`};});
   case "teams":{const pal=p.pack&&p.pack.palette;return pal?pal.teams.map((tm,i)=>({id:i,label:TEAM_NAMES[i]||"Equipo "+i,sub:"",icon:`<span class="swatches">${tm.slice(0,6).map(c=>`<b style="background:rgb(${c.join(",")})"></b>`).join("")}</span>`})):[];}
   case "presets":return presets().map((x,i)=>({id:i,label:x.name||"(sin nombre)",sub:((db.classes[x.classId]||{}).name||"sin clase")+" · Nv "+x.level+" · "+((T.roles[x.role]||{}).label||x.role),icon:`<canvas width="32" height="32" data-class="${x.classId}" data-team="2"></canvas>`}));
+  case "battleAssets":return Object.entries(p.pack?.battleAssets||{}).map(([id,a])=>({id,label:a.name||id,sub:a.kind==="background"?"Fondo":"Plataforma / hoja",icon:`<canvas width="32" height="32" data-battleasset="${esc(id)}"></canvas>`}));
+  case "effects":return Object.entries(p.pack?.spells?.definitions||{}).map(([id,a])=>({id,label:a.name||id,sub:"Efecto visual",icon:"✦"}));
   case "anims":return Object.values(D.animations(p.pack)).sort((a,b)=>a.name.localeCompare(b.name)).map(a=>({id:a.name,label:a.name,sub:Object.keys(a.modes).map(m=>D.MODES[m]).join(" · "),icon:`<canvas width="32" height="32" data-anim="${esc(a.modes.normal||Object.values(a.modes)[0])}"></canvas>`}));
  }
  return [];
@@ -84,22 +88,23 @@ function entries(){
 const terrainIds=()=>Object.keys(P().terrain).map(Number).sort((a,b)=>a-b);
 function presets(){const p=P();if(!DB.presets)DB.presets=D.decodePresets(p.tacticsParams.EnemyPresets);return DB.presets;}
 function renderList(){
- const t=tab(),all=entries();if(DB.sel[t.id]===undefined||!all.some(e=>String(e.id)===String(DB.sel[t.id])))DB.sel[t.id]=all.length?(t.id==="teams"&&all[1]?all[1].id:all[0].id):null;
+ const t=tab(),all=entries();const old=$("dbItems");if(old&&old.dataset.tab)DB.listScroll[old.dataset.tab]=old.scrollTop;if(DB.sel[t.id]===undefined||!all.some(e=>String(e.id)===String(DB.sel[t.id])))DB.sel[t.id]=all.length?(t.id==="teams"&&all[1]?all[1].id:all[0].id):null;
  const creatable=t.table||["terrain","presets"].indexOf(t.id)>=0;
- $("dbList").innerHTML=`<div class="dbsearch"><input id="dbFilter" placeholder="Buscar por nombre o ID…" value="${esc(DB.filter)}"></div><div class="dbitems" id="dbItems"></div>
-  <div class="dbactions">${creatable?`<button class="btn small" data-act="new">＋ Nuevo</button>`:""}${t.table||t.id==="presets"?`<button class="btn small" data-act="dup">⧉ Duplicar</button>`:""}${t.id==="anims"?`<button class="btn small gold" data-act="import">📤 Importar animación</button><button class="btn small" data-act="gallery" data-s="anim">🌐 Galería</button>`:""}${t.id==="presets"?`<button class="btn small danger" data-act="delpreset">🗑</button>`:""}</div>`;
- renderItems(all);
+ $("dbList").innerHTML=`<div class="dbsearch"><input id="dbFilter" placeholder="Buscar por nombre o ID…" value="${esc(DB.filter)}"></div><div class="dbitems" id="dbItems" data-tab="${t.id}"></div>
+  <div class="dbactions">${creatable?`<button class="btn small" data-act="new">＋ Nuevo</button>`:""}${t.table||t.id==="presets"?`<button class="btn small" data-act="dup">⧉ Duplicar</button>`:""}${t.id==="anims"?`<button class="btn small gold" data-act="import">📤 Importar animación</button><button class="btn small" data-act="gallery" data-s="anim">🌐 Galería</button>`:""}${t.id==="presets"?`<button class="btn small danger" data-act="delpreset">🗑</button>`:""}${t.id==="effects"?`<button class="btn small gold" data-act="newEffect">＋ Efecto PNG</button>`:""}${t.id==="battleAssets"?`<button class="btn small gold" data-act="romExtras">Importar recursos GBA</button>`:""}</div>`;
+ renderItems(all);$("dbItems").scrollTop=DB.listScroll[t.id]||0;
 }
 function renderItems(all){
  const t=tab(),q=T.notes.plain(DB.filter),list=(all||entries()).filter(e=>!q||T.notes.plain(e.label+" "+e.sub).includes(q)||String(e.id)===q);
- $("dbItems").innerHTML=list.map(e=>`<button class="dbitem${String(e.id)===String(DB.sel[t.id])?" on":""}" data-sel="${esc(e.id)}"><span class="ic">${e.icon}</span><span class="tx"><b>${t.table?`<small>${e.id}</small> `:""}${esc(e.label)}</b><small>${esc(e.sub)}</small></span></button>`).join("")||`<p class="help" style="padding:12px">Nada por aquí.</p>`;
- Astra.paintIcons($("dbItems"));paintAnimThumbs($("dbItems"));
+ const scroll=$("dbItems").scrollTop;$("dbItems").innerHTML=list.map(e=>`<button class="dbitem${String(e.id)===String(DB.sel[t.id])?" on":""}" data-sel="${esc(e.id)}"><span class="ic">${e.icon}</span><span class="tx"><b>${t.table?`<small>${e.id}</small> `:""}${esc(e.label)}</b><small>${esc(e.sub)}</small></span></button>`).join("")||`<p class="help" style="padding:12px">Nada por aquí.</p>`;
+ $("dbItems").scrollTop=scroll;Astra.paintIcons($("dbItems"));paintAnimThumbs($("dbItems"));paintBattleAssets($("dbItems"));
 }
 async function paintAnimThumbs(root){
  const p=P();for(const c of root.querySelectorAll("canvas[data-anim]")){const clip=p.pack&&p.pack.clips[c.dataset.anim];if(!clip)continue;const src=await Astra.clipSource(p,clip),f=src.frames[0]||[];
   const x=c.getContext("2d");x.clearRect(0,0,c.width,c.height);f.forEach(l=>{const a=src.atlases[l.atlas];const r=a&&a.rects[l.rect];if(!r||!a.image)return;const W=c.width,H=c.height,s=Math.min(W/32*2,(H-4)/r.h,(W-4)/r.w);x.imageSmoothingEnabled=false;x.drawImage(a.image,r.x,r.y,r.w,r.h,(W-r.w*s)/2,H-2-r.h*s,r.w*s,r.h*s);});}
 }
 
+async function paintBattleAssets(root){const p=P();for(const c of root.querySelectorAll("canvas[data-battleasset]")){const a=p.pack?.battleAssets?.[c.dataset.battleasset],im=a&&await Astra.image(p,a.path);if(!im||!c.isConnected)continue;const x=c.getContext("2d"),k=Math.min(c.width/im.width,c.height/im.height);x.imageSmoothingEnabled=false;x.drawImage(im,(c.width-im.width*k)/2,(c.height-im.height*k)/2,im.width*k,im.height*k);}}
 // ---------- formularios ----------
 const opt=(v,label,sel)=>`<option value="${esc(v)}"${sel?" selected":""}>${esc(label)}</option>`;
 const F={
@@ -135,7 +140,7 @@ function effectsTable(list){
 function renderForm(){
  const t=tab(),el=$("dbForm"),scroll=el.scrollTop;if(player){player.stop();player=null;}
  let html="";try{html=formHtml(t);}catch(e){html=`<p class="error">✖ ${esc(e.message)}</p>`;}
- el.innerHTML=html;el.scrollTop=scroll;Astra.paintIcons(el);paintAnimThumbs(el);
+ el.innerHTML=html;el.scrollTop=scroll;Astra.paintIcons(el);paintAnimThumbs(el);paintBattleAssets(el);
  if(t.id==="anims")startPlayer();
 }
 function formHtml(t){
@@ -144,6 +149,8 @@ function formHtml(t){
  return FORMS[t.id](id);
 }
 const FORMS={
+ battleAssets(id){const a=P().pack?.battleAssets?.[id];return a?section(esc(a.name||id),`<canvas width="480" height="320" data-battleasset="${esc(id)}" class="player"></canvas><p class="help">${esc(a.path)} · ${a.width} × ${a.height} px</p>${a.kind==="background"?'<button class="btn gold" data-act="activateBackground">Usar como fondo de batalla</button>':'<p class="help">Hoja de plataformas original conservada. El motor usa una plataforma recortada; esta hoja requiere seleccionar el recorte antes de activarla.</p>'}`):section("Fondos y plataformas","<p>Importa recursos GBA desde la ROM. No se modifica ningún mapa.</p>");},
+ effects(id){const p=P(),a=p.pack?.spells?.definitions?.[id];return section(a?esc(a.name||id):"Battle Effects",a?`<p class="help">Clave: ${esc(id)}. Pistas: ${["charge","projectile","impact","backdrop","burst"].filter(k=>a[k]).join(", ")||"ver definición"}.</p><button class="btn" data-act="assignEffect">Asignar a un arma</button>`:"<p>Importa una hoja PNG con celdas del mismo tamaño. Se registrará un efecto de impacto en el sistema gráfico de ASTRA.</p>");},
  actors(row,e,f){
   const p=P(),cls=p.db.classes[row.classId]||{},variants=Object.keys(cls.variants||{});
   return hero(`<canvas class="portrait" width="96" height="96" data-actor="${row.id}"></canvas><canvas class="mini" width="48" height="48" data-class="${row.classId}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(cls.name||"sin clase")} <button class="btn small" data-act="portrait">🙂 Importar retrato</button> <button class="btn small" data-act="gallery" data-s="portrait">🌐 Galería</button>`)
@@ -282,10 +289,14 @@ async function onClick(ev){
  const p=P(),t=tab();
  try{
   if(b.dataset.tab){DB.tab=b.dataset.tab;DB.filter="";render();return;}
-  if(b.dataset.sel!==undefined){DB.sel[t.id]=t.id==="anims"?b.dataset.sel:Number(b.dataset.sel);render();return;}
+  if(b.dataset.sel!==undefined){DB.sel[t.id]=["anims","battleAssets","effects"].includes(t.id)?b.dataset.sel:Number(b.dataset.sel);$("dbItems").querySelectorAll("[data-sel]").forEach(el=>el.classList.toggle("on",el.dataset.sel===b.dataset.sel));renderForm();return;}
   if(b.dataset.mode){DB.mode=b.dataset.mode;renderForm();return;}
   if(b.dataset.goclass){DB.tab="classes";DB.sel.classes=Number(b.dataset.goclass);render();return;}
   const act=b.dataset.act,{eff}=current();
+  if(act==="romExtras"){Astra.openRomImport();return;}
+  if(act==="activateBackground"){const a=p.pack?.battleAssets?.[DB.sel.battleAssets];T.assert(a&&a.kind==="background","Selecciona un fondo");ensurePack().battleBackground=a.path;dirty("pack");Astra.ui.toast("Fondo seleccionado. Recuerda guardar.");return;}
+  if(act==="newEffect"){await Astra.importBattleEffect(p,ensurePack,()=>{dirty("pack");render();});return;}
+  if(act==="assignEffect"){const id=DB.sel.effects;T.assert(p.pack?.spells?.definitions?.[id],"Selecciona un efecto");const promise=Astra.ui.modal(`<h2>Asignar efecto a un arma</h2><select id="astraEffectWeapon" style="width:100%">${(p.weapons||[]).filter(w=>w&&p.db.weapons[w.id]?.magic).map(w=>`<option value="${w.id}">${w.id} · ${esc(w.name)}</option>`).join("")}</select><p class="help">Solo armas mágicas. No cambia el tipo de daño del arma.</p>`,[{label:"Cancelar",value:false},{label:"Asignar",value:true,cls:"gold"}]);const select=$("astraEffectWeapon");if(await promise){const row=p.weapons[Number(select.value)];T.assert(row,"Arma no disponible");D.set("weapons",row,"spell",id);dirty("weapons");Astra.ui.toast("Efecto asignado. Recuerda guardar.");}return;}
   if(act==="rm"){const k=b.dataset.k,i=Number(b.dataset.i),cur=(t.id==="actors"&&(k==="skills"||k==="inventory")?eff[k]:eff[k])||[];setValue(k,cur.filter((x,j)=>j!==i));render();return;}
   if(act==="addeff"){setValue("effects",(eff.effects||[]).concat({type:"stat",stat:"power",value:1}));render();return;}
   if(act==="addlearn"){setValue("learn",(eff.learn||[]).concat({level:5,skill:((p.skills||[]).find(r=>r&&r.name)||{id:1}).id}));render();return;}

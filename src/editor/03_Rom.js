@@ -59,7 +59,7 @@ R.applyPatch=function(clean,second){
  const magic=String.fromCharCode(second[0],second[1],second[2],second[3]);
  if(magic==="UPS1")return R.applyUPS(clean,second);
  if(magic==="BPS1")return R.applyBPS(clean,second);
- T.assert(second.length>=0x200000&&R.gameCode(second)===R.FE8U.code,"El segundo archivo no es un parche .ups/.bps ni una ROM de FE8.");
+ T.assert(second.length>=0x200000&&R.gameCode(second)===R.gameCode(clean),"El segundo archivo no es un parche .ups/.bps ni una ROM del mismo juego y región.");
  return second;
 };
 R.gameCode=b=>String.fromCharCode(b[0xAC],b[0xAD],b[0xAE],b[0xAF]);
@@ -306,6 +306,22 @@ R.TERRAIN={1:["Llanura",1],2:["Camino",1],3:["Aldea",1,{avoid:10}],4:["Aldea cer
 R.terrainRows=function(existing){const out={};Object.keys(R.TERRAIN).forEach(id=>{if(existing&&existing[id])return;const [name,cost,extra]=R.TERRAIN[id];out[id]=Object.assign({name,cost,color:"#667f60"},extra||{});});return out;};
 const MARKERS={32:"chest",33:"chest",30:"door",3:"village",6:"shop",7:"shop",31:"goal"};
 const stat=(o,k)=>Math.max(0,o[k]||0);
+// Add a native MZ entry point. A Mission definition alone does not launch Scene_Tactics.
+R.ensureMissionStart=function(map){
+ const events=map.events||(map.events=[null]);
+ const start=events.filter(Boolean).find(e=>(e.pages||[]).some(p=>(p.list||[]).some(c=>c.code===357&&c.parameters&&c.parameters[0]==="TacticsMZ"&&c.parameters[1]==="Start")));
+ if(start){if(/<AstraAutoStart>/.test(start.note||""))map.note=(map.note||"").replace(/<AstraDirectStart>/g,"")+"\n<AstraDirectStart>";return {event:start,created:false};} // respect a deliberately configured existing entry point
+ map.note=(map.note||"").replace(/<AstraDirectStart>/g,"")+"\n<AstraDirectStart>";
+ const id=M.nextId(map),page=M.blankPage(),e={id,name:"ASTRA · Iniciar batalla",note:"<AstraAutoStart>",x:0,y:0,pages:[page]};
+ page.trigger=3;page.through=true;page.priorityType=0;events[id]=e;
+ M.setCommand(e,"Start",{mapId:0});
+ e.name="ASTRA · Iniciar batalla";
+ // If the tactical scene returns to this native map, end the autorun rather than looping forever.
+ page.list.splice(page.list.length-1,0,{code:123,indent:0,parameters:["A",0]});
+ const done=M.blankPage();done.conditions.selfSwitchValid=true;done.conditions.selfSwitchCh="A";done.through=true;done.priorityType=0;e.pages.push(done);
+ return {event:e,created:true};
+};
+R.hasPlayerUnits=map=>(map.events||[]).filter(Boolean).some(e=>!!M.find(e,"Ally")||Number(M.find(e,"Unit")?.args.team)===1);
 // Escribe el plan en el proyecto (listas de MZ en memoria). Devuelve los mapas nuevos para guardarlos.
 R.apply=function(p,plan,opts){
  opts=opts||{};const ids={characters:{},classes:{},items:{}},report={classes:0,actors:0,weapons:0,items:0,maps:0,units:0,reused:0};
@@ -365,7 +381,10 @@ R.apply=function(p,plan,opts){
     const e=M.create(map,"enemy",u.x,u.y,{});M.removeCommand(e,"Enemy");
     M.setCommand(e,"Unit",{actorId:actor||0,classId:cls,name:named?named.name:"",team:u.team===2?"2":u.team===0?"1":"3",level:u.level,weaponId:weapon?weapon.id:0,itemId:item?item.id:0,ai:boss||u.ai[1]===3?"hold":"approach",boss});}
    report.units++;});
-  M.setCommand(M.missionEvent(map,true),"Mission",{title:ch.name,objective:throne?"seize":"eliminate",mapGraphics:"resource"});
+  const allies=map.events.filter(Boolean).filter(e=>M.find(e,"Ally")||Number(M.find(e,"Unit")?.args.team)===1);
+  const lord=allies.find(e=>M.find(e,"Ally")?.args.lord)||allies[0];
+  M.setCommand(M.missionEvent(map,true),"Mission",{title:ch.name,objective:throne?"seize":"eliminate",mapGraphics:"resource",leader:lord?lord.id:0,protagonist:lord?lord.id:0,protectedIds:lord?String(lord.id):""});
+  if(R.hasPlayerUnits(map))R.ensureMissionStart(map);
   infos[id]=Object.assign({id,expanded:false,order:order++,parentId:0,scrollX:0,scrollY:0},infos[id]||{},{name:ch.name});
   maps.push({id,chapter:ch,json:map,image:"img/astra/maps/Map"+String(id).padStart(3,"0")+".png"});report.maps++;});
  return {maps,report,ids};
@@ -399,12 +418,29 @@ function blit(dst,src,sx,sy,w,h,dx,dy,flip=false){
 }
 function bounds(im){let x=im.width,y=im.height,r=-1,b=-1;for(let j=0;j<im.height;j++)for(let i=0;i<im.width;i++)if(im.data[(j*im.width+i)*4+3]){x=Math.min(x,i);y=Math.min(y,j);r=Math.max(r,i);b=Math.max(b,j);}return r<0?null:{x,y,w:r-x+1,h:b-y+1};}
 const GFX_REFS={faces:[0x5524],standing:[0x26730,0x267B0,0x26838,0x26C88,0x28064,0x27F74],moving:[0x79584,0x79598,0xBAC2C,0xBAC40],battle:[0x59BD8,0x5A600,0x5A694,0x5A82C,0x6F6A8,0x70A60],icons:[0x36B4],iconPal:[0x35D0]};
+// Standard portrait blocks: LZ77 or the uncompressed GBA type-0 header.
+function portraitBytes(b,o){
+ if(!inRange(b,o,4))return null;
+ if(b[o]===0x10){const d=lzAt(b,o,0x2800);return d&&d.length>=0x1000&&d.length<=0x2800&&d.length%128===0?d:null;}
+ if(b[o]!==0)return null;
+ // FE8's type-0/fake-compressed blocks store the total byte count INCLUDING the 4-byte header.
+ const total=u32(b,o)>>>8;
+ for(const size of [total-4,total]){
+  if(size>=0x1000&&size<=0x2800&&size%128===0&&inRange(b,o+4,size))return b.subarray(o+4,o+4+size);
+ }
+ return null;
+}
 function tableCandidates(rom,refs,score){const candidates=[...new Set(refs.map(x=>ptrAt(rom,x)).filter(x=>x>=0))];const ranked=candidates.map(at=>({at,score:score(at)})).sort((a,b)=>b.score-a.score);return ranked.length&&ranked[0].score>0?ranked[0].at:-1;}
 R.graphicTables=function(ctx){
  if(ctx.graphicTables)return ctx.graphicTables;const b=ctx.rom;
  const count=(start,step,test)=>{let n=0;for(let i=0;i<12;i++){const at=start+i*step;if(inRange(b,at,step)&&test(at))n++;}return n>=3?n:0;};
  const compressed=o=>o>=0&&b[o]===0x10;
- const faces=tableCandidates(b,GFX_REFS.faces,a=>count(a,28,o=>compressed(ptrAt(b,o))&&inRange(b,ptrAt(b,o+8),32)));
+ // Store a logical ID-0 base (the vanilla table physically starts at portrait ID 1).
+ const faceScore=a=>count(a+28,28,o=>!!portraitBytes(b,ptrAt(b,o))&&inRange(b,ptrAt(b,o+8),32));
+ const faceRef=ptrAt(b,GFX_REFS.faces[0]);
+ const vanilla=ctx.crc===R.FE8U.crc;
+ const faceCandidates=[...new Set([...(vanilla?[0x8ACBE0-28]:[]),faceRef,faceRef-28])].filter(a=>a>=0);
+ const faces=faceCandidates.find(a=>faceScore(a)>0)??-1;
  const standing=tableCandidates(b,GFX_REFS.standing,a=>count(a,8,o=>b[o+2]<=2&&compressed(ptrAt(b,o+4))));
  const moving=tableCandidates(b,GFX_REFS.moving,a=>count(a,8,o=>compressed(ptrAt(b,o))&&ptrAt(b,o+4)>=0));
  const battle=tableCandidates(b,GFX_REFS.battle,a=>count(a,32,o=>inRange(b,ptrAt(b,o+12),48)&&compressed(ptrAt(b,o+16))&&compressed(ptrAt(b,o+20))&&compressed(ptrAt(b,o+28))));
@@ -413,10 +449,10 @@ R.graphicTables=function(ctx){
 };
 R.portrait=function(ctx,id){
  const b=ctx.rom,t=R.graphicTables(ctx).faces;if(t<0||!Number.isInteger(id)||id<=0||id>511)return null;const a=t+id*28;if(!inRange(b,a,28))return null;
- const p=palAt(b,ptrAt(b,a+8)),gfx=lzAt(b,ptrAt(b,a),0x10000);
+ const p=palAt(b,ptrAt(b,a+8)),gfx=portraitBytes(b,ptrAt(b,a));
  if(!p||!gfx){const other=lzAt(b,ptrAt(b,a+16),0x10000);if(!p||!other||other.length%320)return null;const h=other.length/40;if(h>160||h%8)return null;return R.decode4bpp(other,80,h,p);}
  // Main portrait is stored in a 32-tile-wide strip, not a linear 96x80 image.
- const sheet=R.decode4bpp(gfx,256,32,p);if(!sheet)return null;
+ const sheet=R.decode4bpp(gfx,256,gfx.length/128,p);if(!sheet)return null;
  const im=rgba(96,80);
  // The centre consists of two 64x32 blocks, with four shoulder/edge strips.
  for(const [sx,sy,w,h,dx,dy] of [[0,0,64,32,16,0],[64,0,64,32,16,32],[128,0,32,16,16,64],[160,0,16,32,0,48],[128,16,32,16,48,64],[176,0,16,32,80,48]])blit(im,sheet,sx,sy,w,h,dx,dy);
@@ -442,6 +478,10 @@ R.movingSprite=function(ctx,classId,team=1){
 };
 // Native RPG Maker MZ sheets B-E. B: tile 0 is reserved for transparency.
 // Slots 1..1023 use the same addressing as Tilemap._drawNormalTile.
+R.repairSelection=function(count,mapId,checked){
+ const allowed=Number.isInteger(count)&&count===1&&Number(mapId)>0;
+ return {allowed,checked:allowed&&!!checked};
+};
 R.nativeTiles=function(ch,im){
  const w=ch.map.width,h=ch.map.height,n=w*h;
  T.assert(im&&im.width===w*16&&im.height===h*16&&ch.map.tiles.length===n,"Mapa FE8 inválido para tiles MZ");
@@ -528,4 +568,43 @@ R.animationPack=function(anim,name,path){
  return {image:im,atlas:{path,rects},clips,modeKeys};
 };
 
+
+// GBA background and platform tables: FEBuilderGBA ROMFE8U/ROMFE7U/ROMFE6JP,
+// ImageBattleBGForm and ImageBattleTerrainForm. These are resource profiles, not map compatibility claims.
+R.GBA_RESOURCES={BE8E:{label:"FE8 USA",background:0x75A68,platform:0x51E48,battle:0x59BD8},AE7E:{label:"FE7 USA",background:0x6AFB0,platform:0x4D100,battle:0x541F4},AFEJ:{label:"FE6 Japón",background:0x5F090,platform:0x44534,battle:0x4B0F8}};
+R.decodeBackground=function(gfx,tsa,palette){
+ if(!gfx||!tsa||!palette||gfx.length%32||tsa.length<1200||palette.length<16)return null;
+ const im=rgba(240,160);for(let k=0;k<600;k++){
+  const e=u16(tsa,k*2),tile=e&1023,bank=e>>12;if((tile+1)*32>gfx.length||bank*16+15>=palette.length)return null;
+  for(let y=0;y<8;y++)for(let x=0;x<8;x++){const sx=e&1024?7-x:x,sy=e&2048?7-y:y,v=gfx[tile*32+sy*4+(sx>>1)],n=sx&1?v>>4:v&15;pixel(im,k%30*8+x,Math.floor(k/30)*8+y,palette[bank*16+n]);}
+ }return im;
+};
+R.battleExtras=function(ctx){
+ const b=ctx.rom,profile=R.GBA_RESOURCES[R.gameCode(b)],out={backgrounds:[],platforms:[],warnings:[]};
+ if(!profile){out.warnings.push("Formato de recursos no soportado: "+R.gameCode(b));return out;}
+ const bg=ptrAt(b,profile.background),floor=ptrAt(b,profile.platform);
+ if(bg<0)out.warnings.push("Tabla de fondos no localizada");else for(let i=0;i<128;i++){
+  const o=bg+i*12;if(!inRange(b,o,12))break;
+  const a=ptrAt(b,o),t=ptrAt(b,o+4),p=ptrAt(b,o+8);if(a<0||t<0||p<0)break;
+  const gfx=lzAt(b,a,0x10000),tsa=lzAt(b,t,0x4000),raw=lzAt(b,p,0x1000),pal=raw&&raw.length%2===0?palAt(raw,0,Math.min(256,raw.length/2)):null;
+  const image=R.decodeBackground(gfx,tsa,pal);if(!image){out.warnings.push("Fondo "+(i+1)+" ilegible o final de tabla");break;}
+  out.backgrounds.push({id:i+1,name:profile.label+" · Fondo "+(i+1),image});
+ }
+ if(floor<0)out.warnings.push("Tabla de plataformas no localizada");else for(let i=0;i<128;i++){
+  const o=floor+i*24;if(!inRange(b,o,24))break;const a=ptrAt(b,o+12),p=ptrAt(b,o+16);if(a<0||p<0)break;
+  const gfx=lzAt(b,a,0x8000),pal=palAt(b,p);if(!gfx||gfx.length%128||!pal||gfx.length>0x2000){out.warnings.push("Plataforma "+(i+1)+" ilegible o final de tabla");break;}
+  const image=R.decode4bpp(gfx,256,gfx.length/128,pal);if(image)out.platforms.push({id:i+1,name:profile.label+" · "+(printable(b.subarray(o,o+12))||"Plataforma "+(i+1)),image});
+ }
+ return out;
+};
+R.resourceAnimationIds=function(ctx){
+ const b=ctx.rom,profile=R.GBA_RESOURCES[R.gameCode(b)];if(!profile)return [];
+ const t=R.gameCode(b)==="BE8E"?R.graphicTables(ctx).battle:ptrAt(b,profile.battle),out=[];
+ if(t<0)return out;
+ for(let i=0;i<512;i++){const a=t+i*32;if(!inRange(b,a,32))break;
+  if(!inRange(b,ptrAt(b,a+12),48)||![16,20,24,28].every(k=>{const off=ptrAt(b,a+k);return off>=0&&b[off]===16;}))break;
+  out.push(i+1);
+ }
+ if(R.gameCode(b)!=="BE8E")ctx.graphicTables={battle:t};return out;
+};
 })(typeof globalThis!=="undefined"?globalThis:this);

@@ -14,6 +14,7 @@ class FolderBackend{
  async blob(path){return (await this.handle(path)).getFile();}
  async text(path){return (await this.blob(path)).text();}
  async write(path,text){const w=await (await this.handle(path,true)).createWritable();await w.write(text);await w.close();}
+ async removeMap(path){if(!/^data\/Map[0-9]+\.json$/.test(path))throw new Error("Ruta de mapa no válida");const data=await this.dir.getDirectoryHandle("data");await data.removeEntry(path.slice(5));}
  async permission(){const o={mode:"readwrite"};if(await this.dir.queryPermission(o)==="granted")return true;return (await this.dir.requestPermission(o))==="granted";}
 }
 class HttpBackend{
@@ -93,4 +94,40 @@ Astra.image=async function(p,path){
  if(!path)return null;if(p.images[path]!==undefined)return p.images[path];
  p.images[path]=(async()=>{try{return await createImageBitmap(await p.backend.blob(path));}catch(e){return null;}})();
  return p.images[path];
+};
+
+// ASTRA map maintenance. Only remove map JSONs; preserve shared tilesets, art and database rows.
+Astra.inspectProjectMaps=async function(p){
+ const rows=[];
+ for(const info of (p.mapInfos||[]).filter(Boolean)){
+  const id=Number(info.id);Tactics.assert(Number.isInteger(id)&&id>0,"ID de mapa inválido");
+  const path=Astra.mapPath(id),raw=await p.backend.text(path),map=JSON.parse(raw);
+  rows.push({id,name:info.name,path,raw,map,imported:/<FE8Import:[^>]+>/.test(map.note||"")});
+ }
+ return rows;
+};
+Astra.purgeProjectMaps=async function(p,rows,ids,keepId){
+ const remove=new Set(ids.map(Number)),live=rows.filter(m=>!remove.has(m.id)),gone=rows.filter(m=>remove.has(m.id));
+ Tactics.assert(gone.length&&live.length&&gone.length===remove.size,"Conserva al menos un mapa y elige IDs válidos");
+ const keep=live.find(m=>m.id===Number(keepId))||live[0];
+ Tactics.assert(typeof p.backend.removeMap==="function","La limpieza solo está disponible en proyectos locales con permiso de escritura");
+ const folder="astra_backups/mapas_"+new Date().toISOString().replace(/[:.]/g,"-")+"_"+Math.random().toString(36).slice(2,8);
+ // Always preserve a complete recoverable snapshot before changing the project index.
+ const paths=["data/MapInfos.json","data/System.json",...(p.packName&&p.pack?["data/"+p.packName+".json"]:[])];
+ for(const path of paths)await p.backend.write(folder+"/"+path,await p.backend.text(path));
+ for(const m of gone)await p.backend.write(folder+"/"+m.path,m.raw);
+ const infos=Tactics.copy(p.mapInfos),system=Tactics.copy(p.system),pack=p.pack?Tactics.copy(p.pack):null;
+ for(const m of gone){infos[m.id]=null;if(pack&&pack.maps)delete pack.maps[m.id];}
+ for(const m of infos.filter(Boolean))if(remove.has(Number(m.parentId)))m.parentId=0;
+ if(remove.has(Number(system.startMapId))||!live.some(m=>m.id===Number(system.startMapId))){system.startMapId=keep.id;system.startX=0;system.startY=0;}
+ // Index is written last. If a metadata write fails, roll back from the snapshot.
+ try{
+  await Astra.saveFile(p,"data/System.json",JSON.stringify(system));
+  if(pack&&p.packName)await Astra.saveFile(p,"data/"+p.packName+".json",JSON.stringify(pack));
+  await Astra.saveFile(p,"data/MapInfos.json",JSON.stringify(infos));
+ }catch(e){for(const path of paths){try{await p.backend.write(path,await p.backend.text(folder+"/"+path));}catch(ignored){}}throw new Error(e.message+". Respaldo: "+folder);}
+ const failures=[];
+ // Only remove files once they are no longer referenced by MapInfos. Do not remove shared graphics.
+ for(const m of gone){try{await p.backend.removeMap(m.path);}catch(e){failures.push(m.path+": "+e.message);}}
+ return {deleted:gone.length,remaining:live.length,keepId:keep.id,folder,failures};
 };
