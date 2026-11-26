@@ -128,7 +128,7 @@ D.buildAnimation=function(o){
  Object.keys(o.modes).forEach(mode=>{const m=o.modes[mode];if(!m||!m.steps||!m.steps.length)return;
   const frames=[];let impact=0;
   m.steps.forEach((s,i)=>{if(i===m.impact)impact=frames.length;const ticks=Math.max(1,Math.round(Number(s.ticks)||1));T.assert(o.frames[s.frame],"Fotograma inexistente: "+s.frame);used.push(s.frame);
-   for(let t=0;t<ticks;t++)frames.push([{atlas:o.name,rect:s.frame,x:0,y:0,zoom,angle:0,mirror:false,opacity:1,blend:0}]);});
+   for(let t=0;t<ticks;t++)frames.push([{atlas:o.name,rect:s.frame,x:0,y:0,zoom,angle:0,mirror:!!o.mirror,opacity:1,blend:0}]);});
   T.assert(frames.length<=1200,"La animación "+D.MODES[mode]+" dura más de 20 segundos.");
   clips[o.name+":"+mode]={fps:60,impact,frames};
  });
@@ -166,6 +166,13 @@ D.feTracks=function(modes,ranged){
  const pick=list=>list.map(n=>modes[n]).find(Boolean)||null,normal=ranged?pick([5,1]):pick([1,5]);
  return {normal,critical:ranged?pick([6,3,5]):pick([3,6,1]),miss:pick([12])||normal};
 };
+// Voltea (espejo) todas las pistas de una animación. Devuelve el nuevo estado (true = volteada).
+D.flipAnimation=function(pack,name){
+ const a=D.animations(pack)[name];T.assert(a,"No existe la animación «"+name+"».");const keys=Object.values(a.modes),layers=[];
+ keys.forEach(k=>(pack.clips[k].frames||[]).forEach(f=>(f||[]).forEach(l=>layers.push(l))));
+ const on=!layers.some(l=>l.mirror);layers.forEach(l=>{l.mirror=on;});return on;
+};
+D.isFlipped=(pack,name)=>{const a=D.animations(pack)[name],c=a&&pack.clips[a.modes.normal||Object.values(a.modes)[0]],f=c&&(c.frames||[]).find(f=>f&&f.length);return !!(f&&f[0].mirror);};
 // Nombre de archivo seguro para img/.
 D.fileName=s=>String(s||"anim").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-zA-Z0-9_-]+/g,"_").replace(/^_+|_+$/g,"")||"anim";
 // Formato que usa MZ para data/*.json: una fila por línea.

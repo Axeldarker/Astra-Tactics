@@ -215,6 +215,21 @@ kbd{padding:1px 5px;border-radius:4px;border:1px solid var(--line);background:#0
 .step button{border:0;background:none;padding:0 2px;font-size:12px;color:var(--muted)}.step.hit button[data-impact]{color:#ffcf6b}
 .assign{margin-top:12px}
 .msprev canvas{border-radius:12px;image-rendering:pixelated}
+/* panel de unidades para colocar */
+.roster .tabs .grow{flex:1}
+.roster .lvl{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.roster .lvl input{width:56px;padding:4px 6px;border-radius:6px;border:1px solid var(--line);background:#081419}
+.ugrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;max-height:46vh;overflow-y:auto;padding-right:2px}
+.ugroup{grid-column:1/-1;font-size:11px;color:var(--gold2);text-transform:uppercase;letter-spacing:.08em;margin-top:4px}
+.ucard{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px;border-radius:10px;border:1px solid var(--line);background:#0b1a1f;cursor:grab;text-align:center}
+.ucard:hover{border-color:var(--gold)}
+.ucard.on{border-color:var(--gold);background:#183842;box-shadow:0 0 0 1px #d2b56755 inset}
+.ucard canvas{width:48px;height:48px;image-rendering:pixelated;border-radius:8px;background:radial-gradient(circle at 50% 40%,#21495a,#0b1a1f)}
+.ucard b{font-size:12px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ucard small{font-size:10px;color:var(--muted)}
+.ucard i{position:absolute;top:4px;right:4px;font-style:normal;font-size:9px;padding:1px 4px;border-radius:5px;background:#5ec8e633;color:#bfeaf6}
+.field.check2{display:flex;align-items:center;gap:8px;font-size:12px}
+#dbRival{padding:4px 6px;border-radius:7px;border:1px solid var(--line);background:#081419;font-size:12px;max-width:220px}
 </style>
 </head>
 <body>
@@ -1911,7 +1926,7 @@ D.buildAnimation=function(o){
  Object.keys(o.modes).forEach(mode=>{const m=o.modes[mode];if(!m||!m.steps||!m.steps.length)return;
   const frames=[];let impact=0;
   m.steps.forEach((s,i)=>{if(i===m.impact)impact=frames.length;const ticks=Math.max(1,Math.round(Number(s.ticks)||1));T.assert(o.frames[s.frame],"Fotograma inexistente: "+s.frame);used.push(s.frame);
-   for(let t=0;t<ticks;t++)frames.push([{atlas:o.name,rect:s.frame,x:0,y:0,zoom,angle:0,mirror:false,opacity:1,blend:0}]);});
+   for(let t=0;t<ticks;t++)frames.push([{atlas:o.name,rect:s.frame,x:0,y:0,zoom,angle:0,mirror:!!o.mirror,opacity:1,blend:0}]);});
   T.assert(frames.length<=1200,"La animación "+D.MODES[mode]+" dura más de 20 segundos.");
   clips[o.name+":"+mode]={fps:60,impact,frames};
  });
@@ -1949,6 +1964,13 @@ D.feTracks=function(modes,ranged){
  const pick=list=>list.map(n=>modes[n]).find(Boolean)||null,normal=ranged?pick([5,1]):pick([1,5]);
  return {normal,critical:ranged?pick([6,3,5]):pick([3,6,1]),miss:pick([12])||normal};
 };
+// Voltea (espejo) todas las pistas de una animación. Devuelve el nuevo estado (true = volteada).
+D.flipAnimation=function(pack,name){
+ const a=D.animations(pack)[name];T.assert(a,"No existe la animación «"+name+"».");const keys=Object.values(a.modes),layers=[];
+ keys.forEach(k=>(pack.clips[k].frames||[]).forEach(f=>(f||[]).forEach(l=>layers.push(l))));
+ const on=!layers.some(l=>l.mirror);layers.forEach(l=>{l.mirror=on;});return on;
+};
+D.isFlipped=(pack,name)=>{const a=D.animations(pack)[name],c=a&&pack.clips[a.modes.normal||Object.values(a.modes)[0]],f=c&&(c.frames||[]).find(f=>f&&f.length);return !!(f&&f[0].mirror);};
 // Nombre de archivo seguro para img/.
 D.fileName=s=>String(s||"anim").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-zA-Z0-9_-]+/g,"_").replace(/^_+|_+$/g,"")||"anim";
 // Formato que usa MZ para data/*.json: una fila por línea.
@@ -2191,7 +2213,8 @@ Astra.paintIcons=function(root){
  root.querySelectorAll("canvas[data-pix],canvas[data-iconset],canvas[data-item],canvas[data-art],canvas[data-actor],canvas[data-class],canvas[data-char]").forEach(async c=>{
   const x=c.getContext("2d"),W=c.width,H=c.height;x.imageSmoothingEnabled=false;
   const fit=(im,sx,sy,w,h,pad)=>{x.clearRect(0,0,W,H);const s=Math.min((W-(pad||0))/w,(H-(pad||0))/h),dw=w*s,dh=h*s;x.drawImage(im,sx,sy,w,h,(W-dw)/2,(H-dh)/2,dw,dh);};
-  const sprite=s=>{if(s)fit(s.im,s.sx,s.sy,s.w,s.h,4);};
+  // Sprites de unidades: misma escala entera para todos, así un jinete se ve más grande que un soldado, como en el juego.
+  const sprite=s=>{if(!s)return;x.clearRect(0,0,W,H);const k=Math.min(Math.max(1,Math.floor(W/24)),(W-2)/s.w,(H-2)/s.h),dw=s.w*k,dh=s.h*k;x.drawImage(s.im,s.sx,s.sy,s.w,s.h,(W-dw)/2,H-1-dh,dw,dh);};
   try{
    if(c.dataset.pix){const im=Astra.pixel(c.dataset.pix);if(im)fit(im,0,0,16,16);return;}
    if(c.dataset.item){const [kind,id]=c.dataset.item.split(":"),a=Astra.itemIcon(p,kind,Number(id));if(!a)return;
@@ -2354,10 +2377,31 @@ function renderInspector(){
  p.warnings.forEach(w=>html+=`<div class="banner info">ℹ ${esc(w)}</div>`);
  if(S.tool==="terrain")html+=terrainHtml();
  const e=S.map.events[S.selected];
+ // Con la herramienta Enemigo/Aliado, las unidades de la base de datos siempre están arriba para seguir colocando.
+ const roster=S.tool==="enemy"||S.tool==="ally"||(S.tool==="select"&&!e);
+ if(roster)html+=rosterHtml();
  if(e)html+=selectionHtml(e);else if(S.tool!=="terrain")html+=emptyHtml();
  if(S.check&&(!S.check.ok||S.check.warnings.length))html+=`<div class="card"><h3>Revisión de la misión</h3>${!S.check.ok?`<p class="error">✖ ${esc(S.check.error)}</p>`:""}${S.check.warnings.map(w=>`<p class="help">⚠ ${esc(w)}</p>`).join("")}</div>`;
- body.innerHTML=html;drawHero();
+ body.innerHTML=html;drawHero();Astra.paintIcons(body);
 }
+// Unidades de la base de datos para colocar: clic para elegir (y luego clic en el mapa) o arrastrar al mapa.
+function rosterHtml(){
+ const p=S.project,kind=S.tool==="enemy"||S.tool==="ally"?S.tool:(S.rosterTab||"ally"),last=S.last[kind]||{};
+ const placed=new Set(S.map.events.filter(Boolean).map(e=>M.find(e,"Ally")).filter(Boolean).map(c=>Number(c.args.actorId)));
+ const card=(pick,canvas,name,sub,on,extra)=>`<button class="ucard${on?" on":""}" draggable="true" data-pick="${esc(pick)}" title="Clic: elegir y luego clic en el mapa · Arrastrar: colocar">${canvas}<b>${esc(name)}</b><small>${esc(sub)}</small>${extra||""}</button>`;
+ let cards="";
+ if(kind==="ally")cards=(p.actors||[]).filter(a=>a&&a.name).map(a=>card("ally:"+a.id,`<canvas width="48" height="48" data-actor="${a.id}"></canvas>`,a.name,names(p.classes,a.classId)+" · Nv "+(a.initialLevel||1),Number(last.actorId)===a.id,placed.has(a.id)?`<i>en el mapa</i>`:"")).join("");
+ else{const pres=Object.values(T.enemyPresets);
+  cards=(pres.length?`<div class="ugroup">Enemigos rápidos</div>`+pres.map(x=>card("preset:"+x.name,`<canvas width="48" height="48" data-class="${Number(x.classId)||0}" data-team="2"></canvas>`,x.name,names(p.classes,x.classId)+" · Nv "+(x.level||1),last.preset===x.name)).join(""):"")
+   +`<div class="ugroup">Clases</div>`+(p.classes||[]).filter(c=>c&&c.name).map(c=>card("class:"+c.id,`<canvas width="48" height="48" data-class="${c.id}" data-team="2"></canvas>`,c.name,"Nv "+(S.rosterLevel||1),!last.preset&&Number(last.classId)===c.id)).join("");}
+ return `<div class="card roster"><h3>${kind==="ally"?"🧑 Personajes para desplegar":"👾 Enemigos para colocar"}</h3>
+  <div class="tabs"><button data-roster="ally" class="${kind==="ally"?"on":""}">Aliados</button><button data-roster="enemy" class="${kind==="enemy"?"on":""}">Enemigos</button>${kind==="enemy"?`<span class="grow"></span><label class="lvl">Nivel <input type="number" min="1" id="rosterLevel" value="${S.rosterLevel||1}"></label>`:""}</div>
+  <p class="help">Clic en uno y luego clic en el mapa, o <b>arrástralo</b> a la casilla. Se edita en 📚 Base de datos.</p><div class="ugrid">${cards||`<p class="help">No hay nada en la base de datos.</p>`}</div></div>`;
+}
+function pickArgs(pick){const i=pick.indexOf(":"),k=pick.slice(0,i),v=pick.slice(i+1);
+ if(k==="ally")return {kind:"ally",args:{actorId:Number(v),lord:!M.markers(S.map).some(m=>m.lord)}};
+ if(k==="preset")return {kind:"enemy",args:{preset:v,classId:0,level:0}};
+ return {kind:"enemy",args:{classId:Number(v),level:S.rosterLevel||1}};}
 function emptyHtml(){
  return `<div class="card empty"><h3>¿Por dónde empiezo?</h3><ol>
   <li>Elige <b>Aliado</b> en la paleta y haz clic en el mapa. Marca <i>Es el líder</i>.</li>
@@ -2420,9 +2464,9 @@ function ranges(e){
 async function sprite(classId,actorId,team){
  const palette=S.project.pack&&S.project.pack.palette;
  const p=S.project,cls=p.db.classes[classId]||{},art=cls.art||cls.graphic,unit=p.pack&&p.pack.units&&art&&p.pack.units[art];
- if(unit&&unit.map){const im=await Astra.image(p,unit.map.path);if(im)return crop({im,sx:0,sy:0,w:unit.map.width,h:unit.map.height},palette,team);}
+ if(unit&&unit.map){const im=await Astra.image(p,unit.map.path);if(im)return Object.assign(crop({im,sx:0,sy:0,w:unit.map.width,h:unit.map.height},palette,team),{base:16});}
  const a=(p.actors||[])[actorId];
- if(a&&a.characterName){const im=await Astra.image(p,"img/characters/"+a.characterName+".png");if(im){const big=a.characterName[0]==="$"||a.characterName.slice(0,2)==="!$";const cw=im.width/(big?3:12),ch=im.height/(big?4:8),i=big?0:a.characterIndex;return crop({im,sx:((i%4)*3+1)*cw,sy:Math.floor(i/4)*4*ch,w:cw,h:ch});}}
+ if(a&&a.characterName){const im=await Astra.image(p,"img/characters/"+a.characterName+".png");if(im){const big=a.characterName[0]==="$"||a.characterName.slice(0,2)==="!$";const cw=im.width/(big?3:12),ch=im.height/(big?4:8),i=big?0:a.characterIndex;return Object.assign(crop({im,sx:((i%4)*3+1)*cw,sy:Math.floor(i/4)*4*ch,w:cw,h:ch}),{base:p.tileSize});}}
  return null;
 }
 const crop=Astra.crop;
@@ -2469,7 +2513,7 @@ function drawOverlay(){
   else if(m.kind==="deploy"){ctx.fillStyle=m.color+"40";ctx.fillRect(x+1,y+1,tw-2,tw-2);ctx.strokeStyle=m.color;ctx.lineWidth=1.5;ctx.setLineDash([5,3]);ctx.strokeRect(x+2,y+2,tw-4,tw-4);ctx.setLineDash([]);}
   else{ctx.fillStyle="rgba(0,0,0,.28)";ctx.beginPath();ctx.ellipse(cx,y+tw*.86,tw*.36,tw*.1,0,0,Math.PI*2);ctx.fill();}
   const covered=m.kind==="deploy"&&M.markers(S.map).some(o=>o!==m&&o.x===m.x&&o.y===m.y);
-  if(sp){const s=Math.min(tw*.95/sp.w,tw*.95/sp.h),dw=sp.w*s,dh=sp.h*s;ctx.drawImage(sp.im,sp.sx,sp.sy,sp.w,sp.h,cx-dw/2,y+tw*.9-dh,dw,dh);}
+  if(sp){const s=Math.min(tw/(sp.base||16),tw*1.5/sp.w,tw*1.5/sp.h),dw=sp.w*s,dh=sp.h*s;ctx.drawImage(sp.im,sp.sx,sp.sy,sp.w,sp.h,cx-dw/2,y+tw*.9-dh,dw,dh);}
   else if(m.kind==="deploy"){if(!covered)ctx.drawImage(Astra.pixel("deploy"),x+3,y+3,tw*.42,tw*.42);}
   else{const own=eventGraphic(e),icon=Astra.pixel(m.kind);
    if(own){const s=Math.min(tw/own.w,tw/own.h),dw=own.w*s,dh=own.h*s;ctx.drawImage(own.im,own.sx,own.sy,own.w,own.h,cx-dw/2,y+tw*.92-dh,dw,dh);}
@@ -2536,7 +2580,9 @@ function onUp(){
 
 // ---------- panel: clics y cambios ----------
 function onInspectorClick(ev){
- const t=ev.target.closest("[data-act],[data-add],[data-remove],[data-brush]");if(!t)return;const e=S.map.events[S.selected];
+ const t=ev.target.closest("[data-act],[data-add],[data-remove],[data-brush],[data-pick],[data-roster]");if(!t)return;const e=S.map.events[S.selected];
+ if(t.dataset.roster){S.rosterTab=t.dataset.roster;S.tool=t.dataset.roster;renderAll();return;}
+ if(t.dataset.pick){const r=pickArgs(t.dataset.pick);S.last[r.kind]=r.args;S.tool=r.kind;renderAll();toast("Ahora haz clic en el mapa para colocarlo");return;}
  if(t.dataset.brush){S.brush=Number(t.dataset.brush);renderInspector();return;}
  if(t.dataset.add)return edit(()=>M.setCommand(e,t.dataset.add,t.dataset.add==="Reinforcement"?{turn:2}:{},M.commands(e)[0].id));
  if(t.dataset.remove)return edit(()=>{M.removeCommand(e,t.dataset.remove);M.refreshLook(e);});
@@ -2546,7 +2592,8 @@ function onInspectorClick(ev){
  if(act==="upgrade")upgradePrompt();
 }
 function onInspectorChange(ev){
- const t=ev.target;if(!t.dataset.field)return;const e=S.map.events[S.selected];if(!e)return;
+ const t=ev.target;
+ if(t.id==="rosterLevel"){S.rosterLevel=Math.max(1,Number(t.value)||1);const l=S.last.enemy;if(l&&!l.preset)l.level=S.rosterLevel;renderInspector();return;}if(!t.dataset.field)return;const e=S.map.events[S.selected];if(!e)return;
  let v=t.type==="checkbox"?t.checked:t.value;const type=t.dataset.type;
  if(["number","map","actor","class","weapon","item","skill","state","switch","variable"].indexOf(type)>=0)v=Number(v)||0;
  if(/^struct/.test(type)){try{v=JSON.parse(v||"[]");}catch(err){t.style.borderColor="#e8797c";toast("JSON no válido");return;}}
@@ -2581,6 +2628,11 @@ function boot(){
  const ov=$("overlay");ov.addEventListener("mousedown",onDown);window.addEventListener("mousemove",onMove);window.addEventListener("mouseup",onUp);
  ov.addEventListener("contextmenu",e=>e.preventDefault());ov.addEventListener("mouseleave",()=>{S.hover=null;$("tooltip").classList.add("hidden");if(S.map)drawOverlay();});
  $("viewport").addEventListener("wheel",ev=>{if(ev.ctrlKey&&S.map){ev.preventDefault();zoom(ev.deltaY<0?1:-1);}},{passive:false});
+ $("inspectorBody").addEventListener("dragstart",ev=>{const c=ev.target.closest("[data-pick]");if(c){ev.dataTransfer.setData("text/astra",c.dataset.pick);ev.dataTransfer.effectAllowed="copy";}});
+ ov.addEventListener("dragover",ev=>{if(!S.map||![...ev.dataTransfer.types].includes("text/astra"))return;ev.preventDefault();const t=tileFromEvent(ev);if(JSON.stringify(t)!==JSON.stringify(S.hover)){S.hover=t;drawOverlay();}});
+ ov.addEventListener("drop",ev=>{const pick=ev.dataTransfer.getData("text/astra");if(!pick||!S.map)return;ev.preventDefault();const t=tileFromEvent(ev);if(!t)return;
+  const there=M.eventAt(S.map,t.x,t.y);if(tactical(there)){toast("Esa casilla ya está ocupada");return;}
+  const r=pickArgs(pick);S.last[r.kind]=T.copy(r.args);edit(()=>{const e=M.create(S.map,r.kind,t.x,t.y,r.args);S.selected=e.id;});toast("✔ Colocado");});
  $("inspectorBody").addEventListener("click",onInspectorClick);$("inspectorBody").addEventListener("change",onInspectorChange);
  $("mapSelect").addEventListener("change",ev=>loadMap(Number(ev.target.value)));
  $("undoBtn").onclick=undo;$("redoBtn").onclick=redo;$("saveBtn").onclick=save;
@@ -2611,18 +2663,12 @@ Astra.drawLayer=function(c,image,rect,tr,x,y,scale,facing){
  c.globalAlpha=tr.opacity===undefined?1:tr.opacity;c.globalCompositeOperation=tr.blend===1?"lighter":"source-over";
  c.imageSmoothingEnabled=false;c.drawImage(image,rect.x,rect.y,rect.w,rect.h,-rect.ox,-rect.oy,rect.w,rect.h);c.restore();
 };
-// Caja que ocupa una pista (para elegir la escala de la vista previa).
-function bounds(src){
- let x0=0,x1=0,y0=-24,y1=0;src.frames.forEach(f=>(f||[]).forEach(l=>{const a=src.atlases[l.atlas],r=a&&a.rects[l.rect];if(!r)return;const z=l.zoom||1;
-  x0=Math.min(x0,(l.x||0)-r.ox*z);x1=Math.max(x1,(l.x||0)+(r.w-r.ox)*z);y0=Math.min(y0,(l.y||0)-24-r.oy*z);y1=Math.max(y1,(l.y||0)-24+(r.h-r.oy)*z);}));
- return {x0,x1,y0,y1};
-}
-// src = {frames:[[capas]], impact, atlases:{nombre:{image,rects}}}
+// Escala fija (2×) para que todas las animaciones se comparen al mismo tamaño, como en el juego.
+// El atacante está a la derecha mirando a la izquierda (como en Fire Emblem); el rival, enfrente.
 class Player{
- constructor(canvas){this.c=canvas;this.ctx=canvas.getContext("2d");this.t=0;this.playing=true;this.speed=1;this.src=null;this.raf=0;this.onTick=null;}
- load(src){this.src=src;this.t=0;this.fit();}
- fit(){if(!this.src||!this.src.frames.length)return;const b=bounds(this.src),W=this.c.width,H=this.c.height;
-  this.scale=Math.max(.5,Math.min(4,Math.floor(Math.min((W*.42)/Math.max(1,b.x1-b.x0+(b.x0<0?-b.x0:0)),(H-60)/Math.max(1,b.y1-b.y0))*2)/2||1));}
+ constructor(canvas){this.c=canvas;this.ctx=canvas.getContext("2d");this.t=0;this.playing=true;this.speed=1;this.src=null;this.rival=null;this.raf=0;this.onTick=null;this.scale=2;}
+ load(src){this.src=src;this.t=0;}
+ setRival(src){this.rival=src;}
  start(){cancelAnimationFrame(this.raf);const step=()=>{this.draw();if(this.playing&&this.src){this.t+=this.speed;if(this.t>=this.src.frames.length+40)this.t=0;}if(this.onTick)this.onTick(this);this.raf=requestAnimationFrame(step);};step();}
  stop(){cancelAnimationFrame(this.raf);this.raf=0;}
  frameIndex(){return this.src?Math.min(this.src.frames.length-1,Math.floor(this.t)):0;}
@@ -2631,8 +2677,11 @@ class Player{
   const g=c.createLinearGradient(0,0,0,H);g.addColorStop(0,"#1b3a4a");g.addColorStop(.62,"#2c5568");g.addColorStop(.63,"#3e5b3a");g.addColorStop(1,"#22331f");c.fillStyle=g;c.fillRect(0,0,W,H);
   // plataformas
   [[ex,"#6f8f5c"],[ax,"#7d9c69"]].forEach(([x,col])=>{c.fillStyle=col;c.beginPath();c.ellipse(x,ground+4,W*.17,12,0,0,Math.PI*2);c.fill();c.fillStyle="#0004";c.beginPath();c.ellipse(x,ground+8,W*.17,10,0,0,Math.PI);c.fill();});
-  // rival de referencia (altura de una unidad normal: 32 px)
-  c.fillStyle="#00000055";c.fillRect(ex-6*S,ground-32*S,12*S,32*S);c.fillStyle="#ffffff33";c.font="11px sans-serif";c.textAlign="center";c.fillText("rival",ex,ground+28);
+  // rival de referencia: otra animación (mirando hacia el atacante) o una silueta de 32 px
+  const rf=this.rival&&this.rival.frames[0];
+  if(rf&&rf.length)rf.forEach(l=>{const a=this.rival.atlases[l.atlas];if(a&&a.image)Astra.drawLayer(c,a.image,a.rects[l.rect],l,ex,ground-24*S,S,-1);});
+  else{c.fillStyle="#00000055";c.fillRect(ex-6*S,ground-32*S,12*S,32*S);}
+  c.fillStyle="#ffffff44";c.font="11px sans-serif";c.textAlign="center";c.fillText(this.rival&&this.rival.name||"rival",ex,ground+28);
   if(!this.src||!this.src.frames.length){c.fillStyle="#cfdada";c.font="14px sans-serif";c.fillText("Sin fotogramas",W/2,H/2);return;}
   const i=this.frameIndex(),frame=this.src.frames[i]||[];
   frame.forEach(l=>{const a=this.src.atlases[l.atlas];if(a&&a.image)Astra.drawLayer(c,a.image,a.rects[l.rect],l,ax,ground-24*S,S,1);});
@@ -2649,6 +2698,14 @@ Astra.clipSource=async function(p,clip){
  await Promise.all([...names].map(async n=>{const a=p.pack.atlases[n];if(a)atlases[n]={image:await Astra.image(p,a.path),rects:a.rects};}));
  return {frames:clip.frames||[],impact:clip.impact||0,atlases};
 };
+
+// Rival de referencia: primer fotograma de la animación elegida ("" = silueta).
+Astra.rivalSource=async function(p,name){
+ const a=name&&D.animations(p.pack)[name],clip=a&&p.pack.clips[a.modes.normal||Object.values(a.modes)[0]];if(!clip)return null;
+ const src=await Astra.clipSource(p,{frames:[clip.frames[0]||[]],impact:0});src.name=name;return src;
+};
+Astra.rivalOptions=(p,cur)=>`<option value="">Rival: silueta</option>`+Object.keys(D.animations(p.pack)).sort().map(n=>`<option value="${esc(n)}"${n===cur?" selected":""}>Rival: ${esc(n)}</option>`).join("");
+Astra.rivalName=()=>localStorage.getItem("astra.rival")||"";
 
 // ---------- utilidades de imagen ----------
 const loadImage=async blob=>{const bmp=await createImageBitmap(blob),c=document.createElement("canvas");c.width=bmp.width;c.height=bmp.height;c.getContext("2d").drawImage(bmp,0,0);return c;};
@@ -2686,7 +2743,7 @@ const closeWin=()=>{const w=$("animWin");if(w){w.classList.add("hidden");w.inner
 // opts: {project, pack(): devuelve el paquete (lo crea si falta), done(nombre)}
 Astra.importAnimation=function(opts){
  const p=opts.project;
- const I={name:"",frames:[],cell:{w:0,h:0},anchor:{x:0,y:0},zoom:1,mode:"normal",tracks:{normal:{steps:[],impact:0},critical:null,miss:null},ranged:null,sheet:null,key:null,source:null,assign:{classId:0,wtype:""}};
+ const I={mirror:false,name:"",frames:[],cell:{w:0,h:0},anchor:{x:0,y:0},zoom:1,mode:"normal",tracks:{normal:{steps:[],impact:0},critical:null,miss:null},ranged:null,sheet:null,key:null,source:null,assign:{classId:0,wtype:""}};
  let player=null;
  const shell=()=>{const w=win(`<header><h2>🎞 Importar animación de batalla</h2><span class="grow"></span><button class="btn small" data-x="close">✕</button></header>
   <div class="awbody"><div class="awleft" id="awLeft"></div><div class="awright" id="awRight"></div></div>
@@ -2758,7 +2815,7 @@ Astra.importAnimation=function(opts){
  const rect=f=>({x:f.sx,y:f.sy,w:f.w,h:f.h,ox:I.anchor.x-f.dx,oy:I.anchor.y-f.dy-24/I.zoom});
  function source(track){
   const atlases={},frames=[];I.frames.forEach((f,i)=>{atlases["f"+i]={image:f.img,rects:[rect(f)]};});
-  let impact=0;(track?track.steps:[]).forEach((s,j)=>{if(j===track.impact)impact=frames.length;for(let t=0;t<s.ticks;t++)frames.push([{atlas:"f"+s.frame,rect:0,zoom:I.zoom}]);});
+  let impact=0;(track?track.steps:[]).forEach((s,j)=>{if(j===track.impact)impact=frames.length;for(let t=0;t<s.ticks;t++)frames.push([{atlas:"f"+s.frame,rect:0,zoom:I.zoom,mirror:I.mirror}]);});
   return {frames,impact,atlases};
  }
  const track=()=>I.tracks[I.mode];
@@ -2794,6 +2851,7 @@ Astra.importAnimation=function(opts){
    <label class="field">Pies Y<input type="number" data-v="ay" value="${I.anchor.y}"></label>
    <label class="field">Escala<input type="number" step="0.25" min="0.25" data-v="zoom" value="${I.zoom}"></label>
   </div>
+  <div class="row2"><label class="field check2"><input type="checkbox" data-v="mirror"${I.mirror?" checked":""}> ↔ Voltear (si mira hacia el lado equivocado)</label><label class="field"><select data-v="rival">${Astra.rivalOptions(p,Astra.rivalName())}</select></label></div>
   ${I.source==="sheet"?`<div class="row3"><label class="field">Celda ancho<input type="number" data-v="cw" value="${I.cell.w}"></label><label class="field">Celda alto<input type="number" data-v="ch" value="${I.cell.h}"></label><label class="field">Fondo<input type="color" data-v="key" value="${hex(I.key)||"#000000"}" ${I.key?"":"disabled"}></label></div>`:""}
   <p class="help">La línea roja en la hoja marca los pies. Si el personaje flota o se hunde en la plataforma, ajusta <b>Pies Y</b>.</p>
   <div class="tabs">${Object.keys(D.MODES).map(m=>`<button class="${I.mode===m?"on":""}" data-mode="${m}">${D.MODES[m]} <small>${I.tracks[m]?I.tracks[m].steps.length:"= Normal"}</small></button>`).join("")}</div>
@@ -2803,6 +2861,7 @@ Astra.importAnimation=function(opts){
    <label class="field">Con arma<select data-v="wt">${wtypes.map(w=>`<option value="${esc(w)}"${w===I.assign.wtype?" selected":""}>${esc(D.WEAPON_TYPES[w]||w)}</option>`).join("")||`<option value="">—</option>`}</select></label></div></div>`;
   paintThumbs(R);
   if(player)player.stop();player=new Player($("awPlayer"));player.load(source(t&&t.steps.length?t:I.tracks.normal));player.start();
+  Astra.rivalSource(p,Astra.rivalName()).then(r=>{if(player)player.setRival(r);});
  }
  function refresh(){if(player){const t=track();player.load(source(t&&t.steps.length?t:I.tracks.normal));}if(I.source==="sheet")drawSheet();}
  function onInput(e){const v=e.target.dataset.v;if(v==="name")I.name=e.target.value;}
@@ -2814,6 +2873,8 @@ Astra.importAnimation=function(opts){
   else if(v==="zoom"&&n>0){I.zoom=n;refresh();}
   else if((v==="cw"||v==="ch")&&n>=8){I.cell[v==="cw"?"w":"h"]=n;sliceSheet();I.tracks={normal:{steps:[],impact:0},critical:null,miss:null};renderLeft();renderRight();}
   else if(v==="key"){const h=el.value;I.key=[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));sliceSheet();renderLeft();renderRight();}
+  else if(v==="mirror"){I.mirror=el.checked;refresh();}
+  else if(v==="rival"){localStorage.setItem("astra.rival",el.value);Astra.rivalSource(p,el.value).then(r=>{if(player)player.setRival(r);});}
   else if(v==="cls"){I.assign.classId=n;renderRight();}else if(v==="wt")I.assign.wtype=el.value;
   else if(el.dataset.ticks!==undefined){track().steps[Number(el.dataset.ticks)].ticks=Math.max(1,n||1);refresh();}
  }
@@ -2848,7 +2909,7 @@ Astra.importAnimation=function(opts){
    const assigned=[];
    groups.forEach(([n,t],gi)=>{
     const modes={};Object.keys(t).forEach(m=>{if(t[m]&&t[m].steps.length)modes[m]={steps:t[m].steps.map(s=>({frame:remap[s.frame],ticks:s.ticks})),impact:t[m].impact};});
-    const built=D.buildAnimation({name:n,path,frames:frames.map(f=>({w:f.w,h:f.h,dx:f.dx,dy:f.dy})),pos:shelf.pos,anchor:I.anchor,zoom:I.zoom,modes});
+    const built=D.buildAnimation({name:n,path,frames:frames.map(f=>({w:f.w,h:f.h,dx:f.dx,dy:f.dy})),pos:shelf.pos,anchor:I.anchor,zoom:I.zoom,mirror:I.mirror,modes});
     D.installAnimation(pack,n,built,true);
     if(I.assign.classId&&I.assign.wtype){const row=p.classes[I.assign.classId],cur=Object.assign({},D.get("classes",row,"battleAnimations")||{}),key=I.assign.wtype+(gi?":far":"");
      cur[key]={normal:n+":normal",critical:n+":critical",miss:n+":miss"};D.set("classes",row,"battleAnimations",cur);assigned.push(key);}
@@ -3121,7 +3182,7 @@ const FORMS={
   if(!a.modes[DB.mode])DB.mode=Object.keys(a.modes)[0];
   const users=D.animationUsers(p.db.classes,name),clip=p.pack.clips[a.modes[DB.mode]]||{};
   return hero(`<canvas class="portrait" width="96" height="96" data-anim="${esc(a.modes.normal||Object.values(a.modes)[0])}"></canvas>`,name,`${(clip.frames||[]).length} fotogramas · ${((clip.frames||[]).length/(clip.fps||60)).toFixed(2)} s · golpe en ${clip.impact||0}`)
-  +`<div class="dbsec"><div class="tabs">${Object.keys(D.MODES).filter(m=>a.modes[m]).map(m=>`<button class="${DB.mode===m?"on":""}" data-mode="${m}">${D.MODES[m]}</button>`).join("")}<span class="grow"></span><button class="btn small" data-act="pause">⏯</button><button class="btn small" data-act="slow">🐢 ×${DB.speed||1}</button></div><canvas id="dbPlayer" class="player" width="520" height="300"></canvas></div>`
+  +`<div class="dbsec"><div class="tabs">${Object.keys(D.MODES).filter(m=>a.modes[m]).map(m=>`<button class="${DB.mode===m?"on":""}" data-mode="${m}">${D.MODES[m]}</button>`).join("")}<span class="grow"></span><select id="dbRival" title="Con quién se compara (mismo tamaño que en el juego)">${Astra.rivalOptions(p,Astra.rivalName())}</select><button class="btn small" data-act="flip" title="Si mira hacia el lado equivocado. Se aplica también en el juego.">↔ Voltear${D.isFlipped(p.pack,name)?" ✓":""}</button><button class="btn small" data-act="pause">⏯</button><button class="btn small" data-act="slow">🐢 ×${DB.speed||1}</button></div><canvas id="dbPlayer" class="player" width="520" height="300"></canvas></div>`
   +section("La usan",users.length?`<div class="chips">${users.map(u=>`<button class="chip" data-goclass="${u.classId}">${esc(u.label)}</button>`).join("")}</div>`:`<p class="help">Ninguna clase. Asígnala en <b>Clases → Armas y animaciones de batalla</b>.</p>`);
  }
 };
@@ -3130,6 +3191,7 @@ async function startPlayer(){
  const p=P(),name=DB.sel.anims,a=D.animations(p.pack)[name],cv=$("dbPlayer");if(!a||!cv)return;
  const clip=p.pack.clips[a.modes[DB.mode]];if(!clip)return;const src=await Astra.clipSource(p,clip);if(!$("dbPlayer"))return;
  if(player)player.stop();player=new Astra.Player(cv);player.speed=DB.speed||1;player.load(src);player.start();
+ const rival=await Astra.rivalSource(p,Astra.rivalName());if(player)player.setRival(rival);
 }
 
 // ---------- cambios ----------
@@ -3142,7 +3204,9 @@ function setValue(key,value){
 }
 function savePresets(){const p=P(),mz=p.plugins.find(x=>x.name==="TacticsMZ");T.assert(mz,"Primero instala TacticsMZ.");mz.parameters=Object.assign({},mz.parameters,{EnemyPresets:D.encodePresets(DB.presets)});p.tacticsParams=mz.parameters;T.setEnemyPresets(DB.presets);dirty("plugins");}
 function onChange(ev){
- const el=ev.target,ty=el.dataset.t;if(!ty)return;
+ const el=ev.target,ty=el.dataset.t;
+ if(el.id==="dbRival"){localStorage.setItem("astra.rival",el.value);Astra.rivalSource(P(),el.value).then(r=>{if(player)player.setRival(r);});return;}
+ if(!ty)return;
  try{
   const k=el.dataset.k,s=el.dataset.s,i=Number(el.dataset.i),raw=el.type==="checkbox"?el.checked:el.value,num=raw===""?undefined:Number(raw);
   const {eff,fields}=current();const p=P();const t=tab();
@@ -3188,6 +3252,7 @@ async function onClick(ev){
   if(act==="import"){Astra.importAnimation({project:p,pack:ensurePack,done:(name,assigned)=>{dirty("pack");if(assigned)dirty("classes");DB.tab="anims";DB.sel.anims=name;DB.mode="normal";render();Astra.ui.toast("🎞 Animación «"+name+"» importada. Recuerda guardar.");}});return;}
   if(act==="mapsprite"){const row=p.classes[DB.sel.classes];Astra.importMapSprite({project:p,pack:ensurePack,done:name=>{dirty("pack");D.set("classes",row,"art",name);dirty("classes");Astra.clearArtCache();render();Astra.ui.toast("🧍 Sprite «"+name+"» asignado a "+row.name);}});return;}
   if(act==="playanim"){if(b.dataset.s){DB.tab="anims";DB.sel.anims=b.dataset.s;DB.mode="normal";render();}return;}
+  if(act==="flip"){const on=D.flipAnimation(p.pack,DB.sel.anims);dirty("pack");renderForm();Astra.ui.toast(on?"↔ Volteada (también en el juego). Recuerda guardar.":"↔ Orientación original");return;}
   if(act==="pause"){if(player)player.playing=!player.playing;return;}
   if(act==="slow"){DB.speed=DB.speed===1||!DB.speed?.5:DB.speed===.5?.25:1;if(player)player.speed=DB.speed;b.textContent="🐢 ×"+DB.speed;return;}
  }catch(e){Astra.ui.toast("✖ "+e.message);}

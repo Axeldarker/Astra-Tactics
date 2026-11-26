@@ -132,10 +132,31 @@ function renderInspector(){
  p.warnings.forEach(w=>html+=`<div class="banner info">ℹ ${esc(w)}</div>`);
  if(S.tool==="terrain")html+=terrainHtml();
  const e=S.map.events[S.selected];
+ // Con la herramienta Enemigo/Aliado, las unidades de la base de datos siempre están arriba para seguir colocando.
+ const roster=S.tool==="enemy"||S.tool==="ally"||(S.tool==="select"&&!e);
+ if(roster)html+=rosterHtml();
  if(e)html+=selectionHtml(e);else if(S.tool!=="terrain")html+=emptyHtml();
  if(S.check&&(!S.check.ok||S.check.warnings.length))html+=`<div class="card"><h3>Revisión de la misión</h3>${!S.check.ok?`<p class="error">✖ ${esc(S.check.error)}</p>`:""}${S.check.warnings.map(w=>`<p class="help">⚠ ${esc(w)}</p>`).join("")}</div>`;
- body.innerHTML=html;drawHero();
+ body.innerHTML=html;drawHero();Astra.paintIcons(body);
 }
+// Unidades de la base de datos para colocar: clic para elegir (y luego clic en el mapa) o arrastrar al mapa.
+function rosterHtml(){
+ const p=S.project,kind=S.tool==="enemy"||S.tool==="ally"?S.tool:(S.rosterTab||"ally"),last=S.last[kind]||{};
+ const placed=new Set(S.map.events.filter(Boolean).map(e=>M.find(e,"Ally")).filter(Boolean).map(c=>Number(c.args.actorId)));
+ const card=(pick,canvas,name,sub,on,extra)=>`<button class="ucard${on?" on":""}" draggable="true" data-pick="${esc(pick)}" title="Clic: elegir y luego clic en el mapa · Arrastrar: colocar">${canvas}<b>${esc(name)}</b><small>${esc(sub)}</small>${extra||""}</button>`;
+ let cards="";
+ if(kind==="ally")cards=(p.actors||[]).filter(a=>a&&a.name).map(a=>card("ally:"+a.id,`<canvas width="48" height="48" data-actor="${a.id}"></canvas>`,a.name,names(p.classes,a.classId)+" · Nv "+(a.initialLevel||1),Number(last.actorId)===a.id,placed.has(a.id)?`<i>en el mapa</i>`:"")).join("");
+ else{const pres=Object.values(T.enemyPresets);
+  cards=(pres.length?`<div class="ugroup">Enemigos rápidos</div>`+pres.map(x=>card("preset:"+x.name,`<canvas width="48" height="48" data-class="${Number(x.classId)||0}" data-team="2"></canvas>`,x.name,names(p.classes,x.classId)+" · Nv "+(x.level||1),last.preset===x.name)).join(""):"")
+   +`<div class="ugroup">Clases</div>`+(p.classes||[]).filter(c=>c&&c.name).map(c=>card("class:"+c.id,`<canvas width="48" height="48" data-class="${c.id}" data-team="2"></canvas>`,c.name,"Nv "+(S.rosterLevel||1),!last.preset&&Number(last.classId)===c.id)).join("");}
+ return `<div class="card roster"><h3>${kind==="ally"?"🧑 Personajes para desplegar":"👾 Enemigos para colocar"}</h3>
+  <div class="tabs"><button data-roster="ally" class="${kind==="ally"?"on":""}">Aliados</button><button data-roster="enemy" class="${kind==="enemy"?"on":""}">Enemigos</button>${kind==="enemy"?`<span class="grow"></span><label class="lvl">Nivel <input type="number" min="1" id="rosterLevel" value="${S.rosterLevel||1}"></label>`:""}</div>
+  <p class="help">Clic en uno y luego clic en el mapa, o <b>arrástralo</b> a la casilla. Se edita en 📚 Base de datos.</p><div class="ugrid">${cards||`<p class="help">No hay nada en la base de datos.</p>`}</div></div>`;
+}
+function pickArgs(pick){const i=pick.indexOf(":"),k=pick.slice(0,i),v=pick.slice(i+1);
+ if(k==="ally")return {kind:"ally",args:{actorId:Number(v),lord:!M.markers(S.map).some(m=>m.lord)}};
+ if(k==="preset")return {kind:"enemy",args:{preset:v,classId:0,level:0}};
+ return {kind:"enemy",args:{classId:Number(v),level:S.rosterLevel||1}};}
 function emptyHtml(){
  return `<div class="card empty"><h3>¿Por dónde empiezo?</h3><ol>
   <li>Elige <b>Aliado</b> en la paleta y haz clic en el mapa. Marca <i>Es el líder</i>.</li>
@@ -198,9 +219,9 @@ function ranges(e){
 async function sprite(classId,actorId,team){
  const palette=S.project.pack&&S.project.pack.palette;
  const p=S.project,cls=p.db.classes[classId]||{},art=cls.art||cls.graphic,unit=p.pack&&p.pack.units&&art&&p.pack.units[art];
- if(unit&&unit.map){const im=await Astra.image(p,unit.map.path);if(im)return crop({im,sx:0,sy:0,w:unit.map.width,h:unit.map.height},palette,team);}
+ if(unit&&unit.map){const im=await Astra.image(p,unit.map.path);if(im)return Object.assign(crop({im,sx:0,sy:0,w:unit.map.width,h:unit.map.height},palette,team),{base:16});}
  const a=(p.actors||[])[actorId];
- if(a&&a.characterName){const im=await Astra.image(p,"img/characters/"+a.characterName+".png");if(im){const big=a.characterName[0]==="$"||a.characterName.slice(0,2)==="!$";const cw=im.width/(big?3:12),ch=im.height/(big?4:8),i=big?0:a.characterIndex;return crop({im,sx:((i%4)*3+1)*cw,sy:Math.floor(i/4)*4*ch,w:cw,h:ch});}}
+ if(a&&a.characterName){const im=await Astra.image(p,"img/characters/"+a.characterName+".png");if(im){const big=a.characterName[0]==="$"||a.characterName.slice(0,2)==="!$";const cw=im.width/(big?3:12),ch=im.height/(big?4:8),i=big?0:a.characterIndex;return Object.assign(crop({im,sx:((i%4)*3+1)*cw,sy:Math.floor(i/4)*4*ch,w:cw,h:ch}),{base:p.tileSize});}}
  return null;
 }
 const crop=Astra.crop;
@@ -247,7 +268,7 @@ function drawOverlay(){
   else if(m.kind==="deploy"){ctx.fillStyle=m.color+"40";ctx.fillRect(x+1,y+1,tw-2,tw-2);ctx.strokeStyle=m.color;ctx.lineWidth=1.5;ctx.setLineDash([5,3]);ctx.strokeRect(x+2,y+2,tw-4,tw-4);ctx.setLineDash([]);}
   else{ctx.fillStyle="rgba(0,0,0,.28)";ctx.beginPath();ctx.ellipse(cx,y+tw*.86,tw*.36,tw*.1,0,0,Math.PI*2);ctx.fill();}
   const covered=m.kind==="deploy"&&M.markers(S.map).some(o=>o!==m&&o.x===m.x&&o.y===m.y);
-  if(sp){const s=Math.min(tw*.95/sp.w,tw*.95/sp.h),dw=sp.w*s,dh=sp.h*s;ctx.drawImage(sp.im,sp.sx,sp.sy,sp.w,sp.h,cx-dw/2,y+tw*.9-dh,dw,dh);}
+  if(sp){const s=Math.min(tw/(sp.base||16),tw*1.5/sp.w,tw*1.5/sp.h),dw=sp.w*s,dh=sp.h*s;ctx.drawImage(sp.im,sp.sx,sp.sy,sp.w,sp.h,cx-dw/2,y+tw*.9-dh,dw,dh);}
   else if(m.kind==="deploy"){if(!covered)ctx.drawImage(Astra.pixel("deploy"),x+3,y+3,tw*.42,tw*.42);}
   else{const own=eventGraphic(e),icon=Astra.pixel(m.kind);
    if(own){const s=Math.min(tw/own.w,tw/own.h),dw=own.w*s,dh=own.h*s;ctx.drawImage(own.im,own.sx,own.sy,own.w,own.h,cx-dw/2,y+tw*.92-dh,dw,dh);}
@@ -314,7 +335,9 @@ function onUp(){
 
 // ---------- panel: clics y cambios ----------
 function onInspectorClick(ev){
- const t=ev.target.closest("[data-act],[data-add],[data-remove],[data-brush]");if(!t)return;const e=S.map.events[S.selected];
+ const t=ev.target.closest("[data-act],[data-add],[data-remove],[data-brush],[data-pick],[data-roster]");if(!t)return;const e=S.map.events[S.selected];
+ if(t.dataset.roster){S.rosterTab=t.dataset.roster;S.tool=t.dataset.roster;renderAll();return;}
+ if(t.dataset.pick){const r=pickArgs(t.dataset.pick);S.last[r.kind]=r.args;S.tool=r.kind;renderAll();toast("Ahora haz clic en el mapa para colocarlo");return;}
  if(t.dataset.brush){S.brush=Number(t.dataset.brush);renderInspector();return;}
  if(t.dataset.add)return edit(()=>M.setCommand(e,t.dataset.add,t.dataset.add==="Reinforcement"?{turn:2}:{},M.commands(e)[0].id));
  if(t.dataset.remove)return edit(()=>{M.removeCommand(e,t.dataset.remove);M.refreshLook(e);});
@@ -324,7 +347,8 @@ function onInspectorClick(ev){
  if(act==="upgrade")upgradePrompt();
 }
 function onInspectorChange(ev){
- const t=ev.target;if(!t.dataset.field)return;const e=S.map.events[S.selected];if(!e)return;
+ const t=ev.target;
+ if(t.id==="rosterLevel"){S.rosterLevel=Math.max(1,Number(t.value)||1);const l=S.last.enemy;if(l&&!l.preset)l.level=S.rosterLevel;renderInspector();return;}if(!t.dataset.field)return;const e=S.map.events[S.selected];if(!e)return;
  let v=t.type==="checkbox"?t.checked:t.value;const type=t.dataset.type;
  if(["number","map","actor","class","weapon","item","skill","state","switch","variable"].indexOf(type)>=0)v=Number(v)||0;
  if(/^struct/.test(type)){try{v=JSON.parse(v||"[]");}catch(err){t.style.borderColor="#e8797c";toast("JSON no válido");return;}}
@@ -359,6 +383,11 @@ function boot(){
  const ov=$("overlay");ov.addEventListener("mousedown",onDown);window.addEventListener("mousemove",onMove);window.addEventListener("mouseup",onUp);
  ov.addEventListener("contextmenu",e=>e.preventDefault());ov.addEventListener("mouseleave",()=>{S.hover=null;$("tooltip").classList.add("hidden");if(S.map)drawOverlay();});
  $("viewport").addEventListener("wheel",ev=>{if(ev.ctrlKey&&S.map){ev.preventDefault();zoom(ev.deltaY<0?1:-1);}},{passive:false});
+ $("inspectorBody").addEventListener("dragstart",ev=>{const c=ev.target.closest("[data-pick]");if(c){ev.dataTransfer.setData("text/astra",c.dataset.pick);ev.dataTransfer.effectAllowed="copy";}});
+ ov.addEventListener("dragover",ev=>{if(!S.map||![...ev.dataTransfer.types].includes("text/astra"))return;ev.preventDefault();const t=tileFromEvent(ev);if(JSON.stringify(t)!==JSON.stringify(S.hover)){S.hover=t;drawOverlay();}});
+ ov.addEventListener("drop",ev=>{const pick=ev.dataTransfer.getData("text/astra");if(!pick||!S.map)return;ev.preventDefault();const t=tileFromEvent(ev);if(!t)return;
+  const there=M.eventAt(S.map,t.x,t.y);if(tactical(there)){toast("Esa casilla ya está ocupada");return;}
+  const r=pickArgs(pick);S.last[r.kind]=T.copy(r.args);edit(()=>{const e=M.create(S.map,r.kind,t.x,t.y,r.args);S.selected=e.id;});toast("✔ Colocado");});
  $("inspectorBody").addEventListener("click",onInspectorClick);$("inspectorBody").addEventListener("change",onInspectorChange);
  $("mapSelect").addEventListener("change",ev=>loadMap(Number(ev.target.value)));
  $("undoBtn").onclick=undo;$("redoBtn").onclick=redo;$("saveBtn").onclick=save;

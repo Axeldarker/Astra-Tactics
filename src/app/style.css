@@ -209,3 +209,18 @@ kbd{padding:1px 5px;border-radius:4px;border:1px solid var(--line);background:#0
 .step button{border:0;background:none;padding:0 2px;font-size:12px;color:var(--muted)}.step.hit button[data-impact]{color:#ffcf6b}
 .assign{margin-top:12px}
 .msprev canvas{border-radius:12px;image-rendering:pixelated}
+/* panel de unidades para colocar */
+.roster .tabs .grow{flex:1}
+.roster .lvl{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.roster .lvl input{width:56px;padding:4px 6px;border-radius:6px;border:1px solid var(--line);background:#081419}
+.ugrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;max-height:46vh;overflow-y:auto;padding-right:2px}
+.ugroup{grid-column:1/-1;font-size:11px;color:var(--gold2);text-transform:uppercase;letter-spacing:.08em;margin-top:4px}
+.ucard{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px;border-radius:10px;border:1px solid var(--line);background:#0b1a1f;cursor:grab;text-align:center}
+.ucard:hover{border-color:var(--gold)}
+.ucard.on{border-color:var(--gold);background:#183842;box-shadow:0 0 0 1px #d2b56755 inset}
+.ucard canvas{width:48px;height:48px;image-rendering:pixelated;border-radius:8px;background:radial-gradient(circle at 50% 40%,#21495a,#0b1a1f)}
+.ucard b{font-size:12px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ucard small{font-size:10px;color:var(--muted)}
+.ucard i{position:absolute;top:4px;right:4px;font-style:normal;font-size:9px;padding:1px 4px;border-radius:5px;background:#5ec8e633;color:#bfeaf6}
+.field.check2{display:flex;align-items:center;gap:8px;font-size:12px}
+#dbRival{padding:4px 6px;border-radius:7px;border:1px solid var(--line);background:#081419;font-size:12px;max-width:220px}

@@ -81,7 +81,8 @@ Astra.paintIcons=function(root){
  root.querySelectorAll("canvas[data-pix],canvas[data-iconset],canvas[data-item],canvas[data-art],canvas[data-actor],canvas[data-class],canvas[data-char]").forEach(async c=>{
   const x=c.getContext("2d"),W=c.width,H=c.height;x.imageSmoothingEnabled=false;
   const fit=(im,sx,sy,w,h,pad)=>{x.clearRect(0,0,W,H);const s=Math.min((W-(pad||0))/w,(H-(pad||0))/h),dw=w*s,dh=h*s;x.drawImage(im,sx,sy,w,h,(W-dw)/2,(H-dh)/2,dw,dh);};
-  const sprite=s=>{if(s)fit(s.im,s.sx,s.sy,s.w,s.h,4);};
+  // Sprites de unidades: misma escala entera para todos, así un jinete se ve más grande que un soldado, como en el juego.
+  const sprite=s=>{if(!s)return;x.clearRect(0,0,W,H);const k=Math.min(Math.max(1,Math.floor(W/24)),(W-2)/s.w,(H-2)/s.h),dw=s.w*k,dh=s.h*k;x.drawImage(s.im,s.sx,s.sy,s.w,s.h,(W-dw)/2,H-1-dh,dw,dh);};
   try{
    if(c.dataset.pix){const im=Astra.pixel(c.dataset.pix);if(im)fit(im,0,0,16,16);return;}
    if(c.dataset.item){const [kind,id]=c.dataset.item.split(":"),a=Astra.itemIcon(p,kind,Number(id));if(!a)return;

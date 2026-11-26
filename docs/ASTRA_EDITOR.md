@@ -120,6 +120,17 @@ Si haces clic con una herramienta de colocar sobre algo que ya existe, Astra **l
 
 ---
 
+### Unidades de la base de datos (panel derecho)
+
+Con la herramienta **Enemigo** o **Aliado** (o *Elegir* sin nada seleccionado), el panel derecho muestra **tus unidades de F9** con su sprite o retrato:
+
+- **Aliados**: tus personajes. Los que ya están en el mapa llevan la etiqueta *en el mapa*.
+- **Enemigos**: primero tus *Enemigos rápidos* (plantillas) y después todas las clases, con el **Nivel** que elijas arriba.
+
+Haz **clic** en una tarjeta y luego clic en el mapa (puedes colocar varias seguidas), o **arrástrala** directamente a la casilla.
+
+---
+
 ## 5. Editar lo que has colocado
 
 Haz clic en algo con la herramienta *Elegir* (o con cualquier otra). El inspector muestra:
@@ -267,6 +278,8 @@ En **📚 Base de datos → 🎞 Animaciones → 📤 Importar animación** pued
    - `C01` después del golpe (en GBA, la espera mientras baja la vida) se convierte en una pausa de 20/60 s.
 2. **Hoja de sprites PNG** en rejilla (como las de `img/feh/Animations` de tu proyecto, celdas de 192×192). Astra adivina el tamaño de celda, ignora las celdas vacías y tú haces clic en los fotogramas en el orden que quieras.
 3. Cualquier mezcla: después de cargar puedes quitar, añadir o reordenar fotogramas, cambiar la duración de cada uno (en 1/60 s) y mover el golpe ⚡.
+
+**Mira hacia el rival.** El atacante sale a la derecha y el rival a la izquierda. Si tu animación mira hacia el lado contrario, marca **↔ Voltear** al importar. En las animaciones que ya tienes, usa el botón **↔ Voltear** del reproductor; el cambio también se aplica en el juego. En **Rival** eliges otra animación para compararla: todas se dibujan a la misma escala (2×), así ves si una es más grande o más pequeña que las demás.
 
 **Revisa los pies.** La vista previa dibuja la animación exactamente como la batalla de TacticsMZ, sobre su plataforma y al lado de un rival de referencia. Si flota o se hunde, cambia **Pies Y** (la línea roja de la hoja marca dónde están). **Escala** agranda o encoge animaciones de otro tamaño.
 

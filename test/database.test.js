@@ -127,3 +127,15 @@ test("iconos pixel-art: 16×16 y solo colores de la paleta",()=>{
  const pix=win.Astra.PIXEL;["village","shop","chest","door","goal","deploy","enemy","ally"].forEach(k=>{
   assert.equal(pix[k].length,16,k);pix[k].forEach((r,i)=>{assert.equal(r.length,16,k+" fila "+i);assert.match(r,/^[.krRwWbBnygGsSuUeEvpP]+$/,k+" fila "+i);});});
 });
+
+test("voltear una animación: todas sus pistas, ida y vuelta",()=>{
+ const layer=()=>({atlas:"A",rect:0,mirror:false});
+ const pack={clips:{"A:normal":{frames:[[layer()],[layer()]]},"A:critical":{frames:[[layer()]]},"A:miss":{frames:[[layer()]]},"B:normal":{frames:[[layer()]]}}};
+ assert.equal(D.isFlipped(pack,"A"),false);
+ assert.equal(D.flipAnimation(pack,"A"),true);assert.equal(D.isFlipped(pack,"A"),true);
+ assert.ok(["A:normal","A:critical","A:miss"].every(k=>pack.clips[k].frames.every(f=>f[0].mirror)));
+ assert.equal(pack.clips["B:normal"].frames[0][0].mirror,false,"no toca otras animaciones");
+ assert.equal(D.flipAnimation(pack,"A"),false);assert.equal(D.isFlipped(pack,"A"),false);
+ const built=D.buildAnimation({name:"M",path:"p.png",frames:[{w:2,h:2,dx:0,dy:0}],pos:[{x:0,y:0}],anchor:{x:1,y:2},mirror:true,modes:{normal:{steps:[{frame:0,ticks:2}],impact:0}}});
+ assert.ok(built.clips["M:normal"].frames.every(f=>f[0].mirror));
+});

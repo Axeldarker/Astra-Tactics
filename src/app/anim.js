@@ -15,18 +15,12 @@ Astra.drawLayer=function(c,image,rect,tr,x,y,scale,facing){
  c.globalAlpha=tr.opacity===undefined?1:tr.opacity;c.globalCompositeOperation=tr.blend===1?"lighter":"source-over";
  c.imageSmoothingEnabled=false;c.drawImage(image,rect.x,rect.y,rect.w,rect.h,-rect.ox,-rect.oy,rect.w,rect.h);c.restore();
 };
-// Caja que ocupa una pista (para elegir la escala de la vista previa).
-function bounds(src){
- let x0=0,x1=0,y0=-24,y1=0;src.frames.forEach(f=>(f||[]).forEach(l=>{const a=src.atlases[l.atlas],r=a&&a.rects[l.rect];if(!r)return;const z=l.zoom||1;
-  x0=Math.min(x0,(l.x||0)-r.ox*z);x1=Math.max(x1,(l.x||0)+(r.w-r.ox)*z);y0=Math.min(y0,(l.y||0)-24-r.oy*z);y1=Math.max(y1,(l.y||0)-24+(r.h-r.oy)*z);}));
- return {x0,x1,y0,y1};
-}
-// src = {frames:[[capas]], impact, atlases:{nombre:{image,rects}}}
+// Escala fija (2×) para que todas las animaciones se comparen al mismo tamaño, como en el juego.
+// El atacante está a la derecha mirando a la izquierda (como en Fire Emblem); el rival, enfrente.
 class Player{
- constructor(canvas){this.c=canvas;this.ctx=canvas.getContext("2d");this.t=0;this.playing=true;this.speed=1;this.src=null;this.raf=0;this.onTick=null;}
- load(src){this.src=src;this.t=0;this.fit();}
- fit(){if(!this.src||!this.src.frames.length)return;const b=bounds(this.src),W=this.c.width,H=this.c.height;
-  this.scale=Math.max(.5,Math.min(4,Math.floor(Math.min((W*.42)/Math.max(1,b.x1-b.x0+(b.x0<0?-b.x0:0)),(H-60)/Math.max(1,b.y1-b.y0))*2)/2||1));}
+ constructor(canvas){this.c=canvas;this.ctx=canvas.getContext("2d");this.t=0;this.playing=true;this.speed=1;this.src=null;this.rival=null;this.raf=0;this.onTick=null;this.scale=2;}
+ load(src){this.src=src;this.t=0;}
+ setRival(src){this.rival=src;}
  start(){cancelAnimationFrame(this.raf);const step=()=>{this.draw();if(this.playing&&this.src){this.t+=this.speed;if(this.t>=this.src.frames.length+40)this.t=0;}if(this.onTick)this.onTick(this);this.raf=requestAnimationFrame(step);};step();}
  stop(){cancelAnimationFrame(this.raf);this.raf=0;}
  frameIndex(){return this.src?Math.min(this.src.frames.length-1,Math.floor(this.t)):0;}
@@ -35,8 +29,11 @@ class Player{
   const g=c.createLinearGradient(0,0,0,H);g.addColorStop(0,"#1b3a4a");g.addColorStop(.62,"#2c5568");g.addColorStop(.63,"#3e5b3a");g.addColorStop(1,"#22331f");c.fillStyle=g;c.fillRect(0,0,W,H);
   // plataformas
   [[ex,"#6f8f5c"],[ax,"#7d9c69"]].forEach(([x,col])=>{c.fillStyle=col;c.beginPath();c.ellipse(x,ground+4,W*.17,12,0,0,Math.PI*2);c.fill();c.fillStyle="#0004";c.beginPath();c.ellipse(x,ground+8,W*.17,10,0,0,Math.PI);c.fill();});
-  // rival de referencia (altura de una unidad normal: 32 px)
-  c.fillStyle="#00000055";c.fillRect(ex-6*S,ground-32*S,12*S,32*S);c.fillStyle="#ffffff33";c.font="11px sans-serif";c.textAlign="center";c.fillText("rival",ex,ground+28);
+  // rival de referencia: otra animación (mirando hacia el atacante) o una silueta de 32 px
+  const rf=this.rival&&this.rival.frames[0];
+  if(rf&&rf.length)rf.forEach(l=>{const a=this.rival.atlases[l.atlas];if(a&&a.image)Astra.drawLayer(c,a.image,a.rects[l.rect],l,ex,ground-24*S,S,-1);});
+  else{c.fillStyle="#00000055";c.fillRect(ex-6*S,ground-32*S,12*S,32*S);}
+  c.fillStyle="#ffffff44";c.font="11px sans-serif";c.textAlign="center";c.fillText(this.rival&&this.rival.name||"rival",ex,ground+28);
   if(!this.src||!this.src.frames.length){c.fillStyle="#cfdada";c.font="14px sans-serif";c.fillText("Sin fotogramas",W/2,H/2);return;}
   const i=this.frameIndex(),frame=this.src.frames[i]||[];
   frame.forEach(l=>{const a=this.src.atlases[l.atlas];if(a&&a.image)Astra.drawLayer(c,a.image,a.rects[l.rect],l,ax,ground-24*S,S,1);});
@@ -53,6 +50,14 @@ Astra.clipSource=async function(p,clip){
  await Promise.all([...names].map(async n=>{const a=p.pack.atlases[n];if(a)atlases[n]={image:await Astra.image(p,a.path),rects:a.rects};}));
  return {frames:clip.frames||[],impact:clip.impact||0,atlases};
 };
+
+// Rival de referencia: primer fotograma de la animación elegida ("" = silueta).
+Astra.rivalSource=async function(p,name){
+ const a=name&&D.animations(p.pack)[name],clip=a&&p.pack.clips[a.modes.normal||Object.values(a.modes)[0]];if(!clip)return null;
+ const src=await Astra.clipSource(p,{frames:[clip.frames[0]||[]],impact:0});src.name=name;return src;
+};
+Astra.rivalOptions=(p,cur)=>`<option value="">Rival: silueta</option>`+Object.keys(D.animations(p.pack)).sort().map(n=>`<option value="${esc(n)}"${n===cur?" selected":""}>Rival: ${esc(n)}</option>`).join("");
+Astra.rivalName=()=>localStorage.getItem("astra.rival")||"";
 
 // ---------- utilidades de imagen ----------
 const loadImage=async blob=>{const bmp=await createImageBitmap(blob),c=document.createElement("canvas");c.width=bmp.width;c.height=bmp.height;c.getContext("2d").drawImage(bmp,0,0);return c;};
@@ -90,7 +95,7 @@ const closeWin=()=>{const w=$("animWin");if(w){w.classList.add("hidden");w.inner
 // opts: {project, pack(): devuelve el paquete (lo crea si falta), done(nombre)}
 Astra.importAnimation=function(opts){
  const p=opts.project;
- const I={name:"",frames:[],cell:{w:0,h:0},anchor:{x:0,y:0},zoom:1,mode:"normal",tracks:{normal:{steps:[],impact:0},critical:null,miss:null},ranged:null,sheet:null,key:null,source:null,assign:{classId:0,wtype:""}};
+ const I={mirror:false,name:"",frames:[],cell:{w:0,h:0},anchor:{x:0,y:0},zoom:1,mode:"normal",tracks:{normal:{steps:[],impact:0},critical:null,miss:null},ranged:null,sheet:null,key:null,source:null,assign:{classId:0,wtype:""}};
  let player=null;
  const shell=()=>{const w=win(`<header><h2>🎞 Importar animación de batalla</h2><span class="grow"></span><button class="btn small" data-x="close">✕</button></header>
   <div class="awbody"><div class="awleft" id="awLeft"></div><div class="awright" id="awRight"></div></div>
@@ -162,7 +167,7 @@ Astra.importAnimation=function(opts){
  const rect=f=>({x:f.sx,y:f.sy,w:f.w,h:f.h,ox:I.anchor.x-f.dx,oy:I.anchor.y-f.dy-24/I.zoom});
  function source(track){
   const atlases={},frames=[];I.frames.forEach((f,i)=>{atlases["f"+i]={image:f.img,rects:[rect(f)]};});
-  let impact=0;(track?track.steps:[]).forEach((s,j)=>{if(j===track.impact)impact=frames.length;for(let t=0;t<s.ticks;t++)frames.push([{atlas:"f"+s.frame,rect:0,zoom:I.zoom}]);});
+  let impact=0;(track?track.steps:[]).forEach((s,j)=>{if(j===track.impact)impact=frames.length;for(let t=0;t<s.ticks;t++)frames.push([{atlas:"f"+s.frame,rect:0,zoom:I.zoom,mirror:I.mirror}]);});
   return {frames,impact,atlases};
  }
  const track=()=>I.tracks[I.mode];
@@ -198,6 +203,7 @@ Astra.importAnimation=function(opts){
    <label class="field">Pies Y<input type="number" data-v="ay" value="${I.anchor.y}"></label>
    <label class="field">Escala<input type="number" step="0.25" min="0.25" data-v="zoom" value="${I.zoom}"></label>
   </div>
+  <div class="row2"><label class="field check2"><input type="checkbox" data-v="mirror"${I.mirror?" checked":""}> ↔ Voltear (si mira hacia el lado equivocado)</label><label class="field"><select data-v="rival">${Astra.rivalOptions(p,Astra.rivalName())}</select></label></div>
   ${I.source==="sheet"?`<div class="row3"><label class="field">Celda ancho<input type="number" data-v="cw" value="${I.cell.w}"></label><label class="field">Celda alto<input type="number" data-v="ch" value="${I.cell.h}"></label><label class="field">Fondo<input type="color" data-v="key" value="${hex(I.key)||"#000000"}" ${I.key?"":"disabled"}></label></div>`:""}
   <p class="help">La línea roja en la hoja marca los pies. Si el personaje flota o se hunde en la plataforma, ajusta <b>Pies Y</b>.</p>
   <div class="tabs">${Object.keys(D.MODES).map(m=>`<button class="${I.mode===m?"on":""}" data-mode="${m}">${D.MODES[m]} <small>${I.tracks[m]?I.tracks[m].steps.length:"= Normal"}</small></button>`).join("")}</div>
@@ -207,6 +213,7 @@ Astra.importAnimation=function(opts){
    <label class="field">Con arma<select data-v="wt">${wtypes.map(w=>`<option value="${esc(w)}"${w===I.assign.wtype?" selected":""}>${esc(D.WEAPON_TYPES[w]||w)}</option>`).join("")||`<option value="">—</option>`}</select></label></div></div>`;
   paintThumbs(R);
   if(player)player.stop();player=new Player($("awPlayer"));player.load(source(t&&t.steps.length?t:I.tracks.normal));player.start();
+  Astra.rivalSource(p,Astra.rivalName()).then(r=>{if(player)player.setRival(r);});
  }
  function refresh(){if(player){const t=track();player.load(source(t&&t.steps.length?t:I.tracks.normal));}if(I.source==="sheet")drawSheet();}
  function onInput(e){const v=e.target.dataset.v;if(v==="name")I.name=e.target.value;}
@@ -218,6 +225,8 @@ Astra.importAnimation=function(opts){
   else if(v==="zoom"&&n>0){I.zoom=n;refresh();}
   else if((v==="cw"||v==="ch")&&n>=8){I.cell[v==="cw"?"w":"h"]=n;sliceSheet();I.tracks={normal:{steps:[],impact:0},critical:null,miss:null};renderLeft();renderRight();}
   else if(v==="key"){const h=el.value;I.key=[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));sliceSheet();renderLeft();renderRight();}
+  else if(v==="mirror"){I.mirror=el.checked;refresh();}
+  else if(v==="rival"){localStorage.setItem("astra.rival",el.value);Astra.rivalSource(p,el.value).then(r=>{if(player)player.setRival(r);});}
   else if(v==="cls"){I.assign.classId=n;renderRight();}else if(v==="wt")I.assign.wtype=el.value;
   else if(el.dataset.ticks!==undefined){track().steps[Number(el.dataset.ticks)].ticks=Math.max(1,n||1);refresh();}
  }
@@ -252,7 +261,7 @@ Astra.importAnimation=function(opts){
    const assigned=[];
    groups.forEach(([n,t],gi)=>{
     const modes={};Object.keys(t).forEach(m=>{if(t[m]&&t[m].steps.length)modes[m]={steps:t[m].steps.map(s=>({frame:remap[s.frame],ticks:s.ticks})),impact:t[m].impact};});
-    const built=D.buildAnimation({name:n,path,frames:frames.map(f=>({w:f.w,h:f.h,dx:f.dx,dy:f.dy})),pos:shelf.pos,anchor:I.anchor,zoom:I.zoom,modes});
+    const built=D.buildAnimation({name:n,path,frames:frames.map(f=>({w:f.w,h:f.h,dx:f.dx,dy:f.dy})),pos:shelf.pos,anchor:I.anchor,zoom:I.zoom,mirror:I.mirror,modes});
     D.installAnimation(pack,n,built,true);
     if(I.assign.classId&&I.assign.wtype){const row=p.classes[I.assign.classId],cur=Object.assign({},D.get("classes",row,"battleAnimations")||{}),key=I.assign.wtype+(gi?":far":"");
      cur[key]={normal:n+":normal",critical:n+":critical",miss:n+":miss"};D.set("classes",row,"battleAnimations",cur);assigned.push(key);}

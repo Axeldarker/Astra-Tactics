@@ -228,7 +228,7 @@ const FORMS={
   if(!a.modes[DB.mode])DB.mode=Object.keys(a.modes)[0];
   const users=D.animationUsers(p.db.classes,name),clip=p.pack.clips[a.modes[DB.mode]]||{};
   return hero(`<canvas class="portrait" width="96" height="96" data-anim="${esc(a.modes.normal||Object.values(a.modes)[0])}"></canvas>`,name,`${(clip.frames||[]).length} fotogramas · ${((clip.frames||[]).length/(clip.fps||60)).toFixed(2)} s · golpe en ${clip.impact||0}`)
-  +`<div class="dbsec"><div class="tabs">${Object.keys(D.MODES).filter(m=>a.modes[m]).map(m=>`<button class="${DB.mode===m?"on":""}" data-mode="${m}">${D.MODES[m]}</button>`).join("")}<span class="grow"></span><button class="btn small" data-act="pause">⏯</button><button class="btn small" data-act="slow">🐢 ×${DB.speed||1}</button></div><canvas id="dbPlayer" class="player" width="520" height="300"></canvas></div>`
+  +`<div class="dbsec"><div class="tabs">${Object.keys(D.MODES).filter(m=>a.modes[m]).map(m=>`<button class="${DB.mode===m?"on":""}" data-mode="${m}">${D.MODES[m]}</button>`).join("")}<span class="grow"></span><select id="dbRival" title="Con quién se compara (mismo tamaño que en el juego)">${Astra.rivalOptions(p,Astra.rivalName())}</select><button class="btn small" data-act="flip" title="Si mira hacia el lado equivocado. Se aplica también en el juego.">↔ Voltear${D.isFlipped(p.pack,name)?" ✓":""}</button><button class="btn small" data-act="pause">⏯</button><button class="btn small" data-act="slow">🐢 ×${DB.speed||1}</button></div><canvas id="dbPlayer" class="player" width="520" height="300"></canvas></div>`
   +section("La usan",users.length?`<div class="chips">${users.map(u=>`<button class="chip" data-goclass="${u.classId}">${esc(u.label)}</button>`).join("")}</div>`:`<p class="help">Ninguna clase. Asígnala en <b>Clases → Armas y animaciones de batalla</b>.</p>`);
  }
 };
@@ -237,6 +237,7 @@ async function startPlayer(){
  const p=P(),name=DB.sel.anims,a=D.animations(p.pack)[name],cv=$("dbPlayer");if(!a||!cv)return;
  const clip=p.pack.clips[a.modes[DB.mode]];if(!clip)return;const src=await Astra.clipSource(p,clip);if(!$("dbPlayer"))return;
  if(player)player.stop();player=new Astra.Player(cv);player.speed=DB.speed||1;player.load(src);player.start();
+ const rival=await Astra.rivalSource(p,Astra.rivalName());if(player)player.setRival(rival);
 }
 
 // ---------- cambios ----------
@@ -249,7 +250,9 @@ function setValue(key,value){
 }
 function savePresets(){const p=P(),mz=p.plugins.find(x=>x.name==="TacticsMZ");T.assert(mz,"Primero instala TacticsMZ.");mz.parameters=Object.assign({},mz.parameters,{EnemyPresets:D.encodePresets(DB.presets)});p.tacticsParams=mz.parameters;T.setEnemyPresets(DB.presets);dirty("plugins");}
 function onChange(ev){
- const el=ev.target,ty=el.dataset.t;if(!ty)return;
+ const el=ev.target,ty=el.dataset.t;
+ if(el.id==="dbRival"){localStorage.setItem("astra.rival",el.value);Astra.rivalSource(P(),el.value).then(r=>{if(player)player.setRival(r);});return;}
+ if(!ty)return;
  try{
   const k=el.dataset.k,s=el.dataset.s,i=Number(el.dataset.i),raw=el.type==="checkbox"?el.checked:el.value,num=raw===""?undefined:Number(raw);
   const {eff,fields}=current();const p=P();const t=tab();
@@ -295,6 +298,7 @@ async function onClick(ev){
   if(act==="import"){Astra.importAnimation({project:p,pack:ensurePack,done:(name,assigned)=>{dirty("pack");if(assigned)dirty("classes");DB.tab="anims";DB.sel.anims=name;DB.mode="normal";render();Astra.ui.toast("🎞 Animación «"+name+"» importada. Recuerda guardar.");}});return;}
   if(act==="mapsprite"){const row=p.classes[DB.sel.classes];Astra.importMapSprite({project:p,pack:ensurePack,done:name=>{dirty("pack");D.set("classes",row,"art",name);dirty("classes");Astra.clearArtCache();render();Astra.ui.toast("🧍 Sprite «"+name+"» asignado a "+row.name);}});return;}
   if(act==="playanim"){if(b.dataset.s){DB.tab="anims";DB.sel.anims=b.dataset.s;DB.mode="normal";render();}return;}
+  if(act==="flip"){const on=D.flipAnimation(p.pack,DB.sel.anims);dirty("pack");renderForm();Astra.ui.toast(on?"↔ Volteada (también en el juego). Recuerda guardar.":"↔ Orientación original");return;}
   if(act==="pause"){if(player)player.playing=!player.playing;return;}
   if(act==="slow"){DB.speed=DB.speed===1||!DB.speed?.5:DB.speed===.5?.25:1;if(player)player.speed=DB.speed;b.textContent="🐢 ×"+DB.speed;return;}
  }catch(e){Astra.ui.toast("✖ "+e.message);}
