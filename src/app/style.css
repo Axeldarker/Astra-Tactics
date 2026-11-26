@@ -413,3 +413,21 @@ a.btn{color:inherit;text-decoration:none}
 #status .round{width:28px;height:28px;border-radius:50%;justify-content:center;padding:0;margin-left:10px}
 .modal{border-color:var(--frame)}
 .modal ol.steps2{padding-left:20px}.modal ol.steps2 li{margin:6px 0}
+/* ===== 🎮 importar hack de FE8 ===== */
+.romimp{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+.romimp h3{margin:6px 0 0;font-size:14px;color:var(--gold2)}
+.romslots{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.romslot{display:flex;flex-direction:column;gap:4px;padding:14px;border:1px dashed var(--frame);border-radius:10px;cursor:pointer;background:rgba(255,255,255,.03)}
+.romslot:hover{border-color:var(--gold)}
+.romslot.ok{border-style:solid;border-color:#6fbf73;background:rgba(111,191,115,.08)}
+.romslot .ki{font-size:26px}.romslot small{opacity:.75}.romslot em{color:#8fd694;font-style:normal;font-size:12px;word-break:break-all}
+.romlist{display:flex;flex-direction:column;gap:4px;max-height:260px;overflow:auto}
+.romrow{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:rgba(255,255,255,.04);cursor:pointer}
+.romrow:hover{background:rgba(255,255,255,.08)}
+.romrow small{margin-left:auto;opacity:.7}
+.romrow .tag{font-size:11px;padding:1px 7px;border-radius:6px;background:#3f7fd6;color:#fff}
+.romrow .tag.changed{background:#b5862c}
+.romimp .chk{display:flex;gap:8px;align-items:center}
+.card.warn{border-color:#d6a13a}
+.romimp details{margin-top:4px}
+.rombtn{border-color:var(--frame)}

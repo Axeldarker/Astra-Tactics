@@ -332,6 +332,30 @@ Si no está seguro, te marca la opción más probable y eliges tú. Los retratos
 
 > Los recursos de FE Essentials son F2U (gratis para juegos fan, **sin uso comercial**) y piden crédito a sus autores. Copia los créditos desde la página de cada recurso.
 
+### 🎮 Importar un hack de FE8
+
+Para quien ya tiene un hack de **Fire Emblem: The Sacred Stones (USA)** y quiere seguirlo en RPG Maker MZ con Astra. En **📥 Importar → 🎮 Importar un hack de FE8**:
+
+1. **Tu ROM limpia de FE8 (USA)**: el `.gba` original, sin parchear.
+2. **El hack**: su parche `.ups` o `.bps` (como se reparten los hacks) o la ROM ya parcheada.
+
+También puedes arrastrar los dos archivos a la ventana o al editor. Todo se procesa en el navegador: los archivos no salen de tu equipo y **la ROM no se copia a tu proyecto**.
+
+Astra compara el hack con la ROM original y **solo trae lo que el hack cambió**:
+
+| Del hack | En tu proyecto |
+|---|---|
+| Capítulos nuevos o cambiados (eliges cuáles) | Un mapa de MZ por capítulo, con su **terreno** (en regiones, con el mismo número que en FE) y, si quieres, la **imagen del mapa** dibujada con su tileset (`img/astra/maps/`) |
+| Unidades de la escena inicial | ★ Aliado (con su personaje), ★ Enemigo (clase, nivel, arma y objeto) y ★ Unidad para jefes y unidades verdes (con su personaje). Si entran caminando, se colocan donde terminan |
+| Cofres, puertas, aldeas, armerías, tiendas y trono | Sus marcadores en el mapa (vacíos: elige el contenido). Con trono, la misión es «Conquistar» |
+| Personajes, clases y objetos que el hack cambió o que usan esos capítulos | Filas nuevas en F9 con sus estadísticas, crecimientos, rangos de arma, inventario, tipo de movimiento y promoción |
+
+Lo que ya exista con el mismo nombre se reutiliza. Los terrenos de FE que falten se añaden al paquete de gráficos.
+
+**No se importa**: diálogos, eventos con lógica (refuerzos por turno, conversaciones, condiciones), el contenido de cofres y aldeas, ni gráficos de personajes (retratos, animaciones y sprites: tráelos desde 🌐 Galería con sus créditos).
+
+> Solo FE8 USA, la base de casi todos los hacks. Las direcciones de las tablas se comprueban contra tu ROM limpia y, si el hack movió una tabla, Astra sigue el puntero nuevo. Si algo sale mal, abre **Detalles técnicos** en la ventana y mándalo junto con el error.
+
 ---
 
 ## 14. Atajos de teclado
@@ -387,6 +411,7 @@ Chrome perdió el permiso de la carpeta. Recarga la página y usa *↻ Reabrir*:
 ```
 src/editor/01_Model.js   Modelo: leer/escribir eventos ★ en el JSON de un mapa. Sin DOM: se prueba en Node.
 src/editor/02_Database.js Base de datos: notas F9, filas nuevas de MZ, plantillas, scripts de FE, atlas y pistas.
+src/editor/03_Rom.js     Importador de hacks de FE8: parches UPS/BPS, LZ77, textos, tablas, capítulos, unidades y conversión a MZ.
 src/app/project.js       Acceso al proyecto (carpeta o HTTP), plugins.js, paquete de gráficos, copias de seguridad.
 src/app/tilemap.js       Dibujo del mapa con las reglas de Tilemap de MZ (las tablas se leen de rmmz_core.js).
 src/app/icons.js         Iconos pixel-art propios, IconSet, iconos del paquete, sprites recoloreados y retratos.
@@ -396,6 +421,7 @@ src/app/anim.js          Reproductor de animaciones, importador (hoja PNG / FE E
 src/app/database.js      Ventana Base de datos.
 src/app/importer.js      Menú 📥 Importar: arrastrar o enlace, detección del tipo, retratos e iconos.
 src/app/gallery.js       🌐 Galería: lee el FE Repo de GitHub (como feessentials.com) y manda cada recurso a su importador.
+src/app/romimport.js     Ventana 🎮 Importar un hack de FE8 (elige archivos, compara, guarda mapas, imágenes y tablas).
 src/app/style.css        Estilos.
 src/app/shell.html       Plantilla. tools/build.js mete dentro el motor, el modelo, la app y los 3 plugins.
 dist/AstraEditor.html    Resultado: un único archivo.

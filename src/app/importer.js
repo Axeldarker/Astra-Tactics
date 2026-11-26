@@ -97,6 +97,7 @@ Astra.openImport=function(initial){
  const {win,closeWin}=tools();let busy=false;
  const w=win(`<header><h2>📥 Importar</h2><span class="grow"></span><button class="btn small" data-x="close">✕</button></header>
   <div class="awbody single"><div class="imphub">
+   <button class="btn big gallerybtn rombtn" data-x="rom">🎮 Importar un hack de FE8<small>Tu ROM limpia + el parche .ups/.bps: capítulos, mapas, unidades y datos</small></button>
    <button class="btn gold big gallerybtn" data-x="gallery">🌐 Explorar la galería de FE Essentials<small>Animaciones, sprites, retratos e iconos con su botón 📥 Importar</small></button>
    <div class="drop" id="ihDrop"><div class="big">📥</div><p><b>Arrastra aquí lo que quieras importar</b>: un PNG, un .zip, el .txt con sus PNG o una carpeta entera.</p>
     <p class="help">Astra adivina si es una animación de batalla, un sprite de mapa, un retrato o un icono.</p>
@@ -113,6 +114,7 @@ Astra.openImport=function(initial){
  async function take(list){
   if(busy)return;busy=true;
   try{
+   if(Astra.isRomImport([...list])){busy=false;return Astra.openRomImport([...list]);}
    hint("Revisando…");const files=await expand([...list]);T.assert(files.length,"No llegó ningún archivo.");
    const d=await Astra.detectImport(files);loaded=files;
    if(d.kind&&d.sure){Astra.ui.toast("Detectado: "+KINDS[d.kind].label+". "+d.why);openKind(d.kind,files);return;}
@@ -128,7 +130,7 @@ Astra.openImport=function(initial){
  async function fromUrl(){if(busy)return;const url=$("ihUrl").value;busy=true;try{const files=await Astra.fetchImport(url,t=>hint(t));busy=false;await take(files);}catch(e){busy=false;hint("✖ "+e.message,true);}}
  w.onclick=e=>{const b=e.target.closest("[data-x],[data-kind]");if(!b)return;
   if(b.dataset.kind)return openKind(b.dataset.kind,loaded||[]);
-  if(b.dataset.x==="close")return closeWin();if(b.dataset.x==="url")return fromUrl();if(b.dataset.x==="gallery")return Astra.openGallery();};
+  if(b.dataset.x==="close")return closeWin();if(b.dataset.x==="url")return fromUrl();if(b.dataset.x==="gallery")return Astra.openGallery();if(b.dataset.x==="rom")return Astra.openRomImport();};
  if(initial&&initial.length)take(initial);
 };
 
