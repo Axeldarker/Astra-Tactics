@@ -399,25 +399,12 @@ function blit(dst,src,sx,sy,w,h,dx,dy,flip=false){
 }
 function bounds(im){let x=im.width,y=im.height,r=-1,b=-1;for(let j=0;j<im.height;j++)for(let i=0;i<im.width;i++)if(im.data[(j*im.width+i)*4+3]){x=Math.min(x,i);y=Math.min(y,j);r=Math.max(r,i);b=Math.max(b,j);}return r<0?null:{x,y,w:r-x+1,h:b-y+1};}
 const GFX_REFS={faces:[0x5524],standing:[0x26730,0x267B0,0x26838,0x26C88,0x28064,0x27F74],moving:[0x79584,0x79598,0xBAC2C,0xBAC40],battle:[0x59BD8,0x5A600,0x5A694,0x5A82C,0x6F6A8,0x70A60],icons:[0x36B4],iconPal:[0x35D0]};
-// Standard portrait blocks: LZ77 or the uncompressed GBA type-0 header.
-function portraitBytes(b,o){
- if(!inRange(b,o,4))return null;
- if(b[o]===0x10){const d=lzAt(b,o,0x2800);return d&&d.length>=0x1000&&d.length<=0x2800&&d.length%128===0?d:null;}
- if(b[o]!==0)return null;
- const size=u32(b,o)>>>8;
- return size>=0x1000&&size<=0x2800&&size%128===0&&inRange(b,o+4,size)?b.subarray(o+4,o+4+size):null;
-}
 function tableCandidates(rom,refs,score){const candidates=[...new Set(refs.map(x=>ptrAt(rom,x)).filter(x=>x>=0))];const ranked=candidates.map(at=>({at,score:score(at)})).sort((a,b)=>b.score-a.score);return ranked.length&&ranked[0].score>0?ranked[0].at:-1;}
 R.graphicTables=function(ctx){
  if(ctx.graphicTables)return ctx.graphicTables;const b=ctx.rom;
  const count=(start,step,test)=>{let n=0;for(let i=0;i<12;i++){const at=start+i*step;if(inRange(b,at,step)&&test(at))n++;}return n>=3?n:0;};
  const compressed=o=>o>=0&&b[o]===0x10;
- // Store a logical ID-0 base (the vanilla table physically starts at portrait ID 1).
- const faceScore=a=>count(a+28,28,o=>!!portraitBytes(b,ptrAt(b,o))&&inRange(b,ptrAt(b,o+8),32));
- const faceRef=ptrAt(b,GFX_REFS.faces[0]);
- const vanilla=ctx.crc===R.FE8U.crc;
- const faceCandidates=[...new Set([...(vanilla?[0x8ACBE0-28]:[]),faceRef,faceRef-28])].filter(a=>a>=0);
- const faces=faceCandidates.find(a=>faceScore(a)>0)??-1;
+ const faces=tableCandidates(b,GFX_REFS.faces,a=>count(a,28,o=>compressed(ptrAt(b,o))&&inRange(b,ptrAt(b,o+8),32)));
  const standing=tableCandidates(b,GFX_REFS.standing,a=>count(a,8,o=>b[o+2]<=2&&compressed(ptrAt(b,o+4))));
  const moving=tableCandidates(b,GFX_REFS.moving,a=>count(a,8,o=>compressed(ptrAt(b,o))&&ptrAt(b,o+4)>=0));
  const battle=tableCandidates(b,GFX_REFS.battle,a=>count(a,32,o=>inRange(b,ptrAt(b,o+12),48)&&compressed(ptrAt(b,o+16))&&compressed(ptrAt(b,o+20))&&compressed(ptrAt(b,o+28))));
@@ -426,10 +413,10 @@ R.graphicTables=function(ctx){
 };
 R.portrait=function(ctx,id){
  const b=ctx.rom,t=R.graphicTables(ctx).faces;if(t<0||!Number.isInteger(id)||id<=0||id>511)return null;const a=t+id*28;if(!inRange(b,a,28))return null;
- const p=palAt(b,ptrAt(b,a+8)),gfx=portraitBytes(b,ptrAt(b,a));
+ const p=palAt(b,ptrAt(b,a+8)),gfx=lzAt(b,ptrAt(b,a),0x10000);
  if(!p||!gfx){const other=lzAt(b,ptrAt(b,a+16),0x10000);if(!p||!other||other.length%320)return null;const h=other.length/40;if(h>160||h%8)return null;return R.decode4bpp(other,80,h,p);}
  // Main portrait is stored in a 32-tile-wide strip, not a linear 96x80 image.
- const sheet=R.decode4bpp(gfx,256,gfx.length/128,p);if(!sheet)return null;
+ const sheet=R.decode4bpp(gfx,256,32,p);if(!sheet)return null;
  const im=rgba(96,80);
  // The centre consists of two 64x32 blocks, with four shoulder/edge strips.
  for(const [sx,sy,w,h,dx,dy] of [[0,0,64,32,16,0],[64,0,64,32,16,32],[128,0,32,16,16,64],[160,0,16,32,0,48],[128,16,32,16,48,64],[176,0,16,32,80,48]])blit(im,sheet,sx,sy,w,h,dx,dy);
@@ -455,10 +442,6 @@ R.movingSprite=function(ctx,classId,team=1){
 };
 // Native RPG Maker MZ sheets B-E. B: tile 0 is reserved for transparency.
 // Slots 1..1023 use the same addressing as Tilemap._drawNormalTile.
-R.repairSelection=function(count,mapId,checked){
- const allowed=Number.isInteger(count)&&count===1&&Number(mapId)>0;
- return {allowed,checked:allowed&&!!checked};
-};
 R.nativeTiles=function(ch,im){
  const w=ch.map.width,h=ch.map.height,n=w*h;
  T.assert(im&&im.width===w*16&&im.height===h*16&&ch.map.tiles.length===n,"Mapa FE8 inválido para tiles MZ");
