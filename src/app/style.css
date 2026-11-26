@@ -224,3 +224,20 @@ kbd{padding:1px 5px;border-radius:4px;border:1px solid var(--line);background:#0
 .ucard i{position:absolute;top:4px;right:4px;font-style:normal;font-size:9px;padding:1px 4px;border-radius:5px;background:#5ec8e633;color:#bfeaf6}
 .field.check2{display:flex;align-items:center;gap:8px;font-size:12px}
 #dbRival{padding:4px 6px;border-radius:7px;border:1px solid var(--line);background:#081419;font-size:12px;max-width:220px}
+/* menú 📥 Importar */
+.imphub{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.imphub h3{margin:8px 0 0;font-size:14px;color:var(--gold2)}
+.chips.center{justify-content:center}
+.urlrow{display:flex;gap:8px}
+.urlrow input{flex:1;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:inherit;font:inherit}
+.kinds{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.kind{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:14px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);color:inherit;font:inherit;text-align:left;cursor:pointer}
+.kind:hover{border-color:var(--gold)}
+.kind.rec{border-color:var(--gold);box-shadow:0 0 0 2px #d2b56744}
+.kind .ki{font-size:28px}
+.kind small{opacity:.75;line-height:1.35}
+.card.found{border-color:var(--gold)}
+.icwrap{display:flex;gap:16px;align-items:flex-start;overflow:auto;max-height:52vh}
+.icwrap canvas{image-rendering:pixelated;border:1px solid var(--line);border-radius:6px;cursor:crosshair}
+#icBig{cursor:default}
+.dbhero .sub .btn{margin-left:8px}

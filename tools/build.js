@@ -64,7 +64,7 @@ function buildEditor(plugins){
  const safe=code=>code.replace(/<\/script/gi,"<\\/script");
  const engine=plugins["TacticsEngine.js"].replace(/^\/\*:[\s\S]*?\*\/\n/m,"");
  const editor=files("editor").map(f=>strip(read(f))).join("\n");
- const app=["project.js","tilemap.js","icons.js","app.js","anim.js","database.js"].map(f=>read(path.join(SRC,"app",f))).join("\n");
+ const app=["project.js","tilemap.js","icons.js","app.js","anim.js","database.js","importer.js"].map(f=>read(path.join(SRC,"app",f))).join("\n");
  const bundle="window.ASTRA_PLUGINS="+JSON.stringify(plugins)+";\nwindow.ASTRA_VERSION="+JSON.stringify(pkg.version)+";\n";
  return read(path.join(SRC,"app","shell.html")).replace("/*CSS*/",()=>read(path.join(SRC,"app","style.css")))
   .replace("/*ENGINE*/",()=>safe(engine)).replace("/*EDITOR*/",()=>safe(editor)).replace("/*APP*/",()=>safe(bundle+app));

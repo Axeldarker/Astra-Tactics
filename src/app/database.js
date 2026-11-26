@@ -146,7 +146,7 @@ function formHtml(t){
 const FORMS={
  actors(row,e,f){
   const p=P(),cls=p.db.classes[row.classId]||{},variants=Object.keys(cls.variants||{});
-  return hero(`<canvas class="portrait" width="96" height="96" data-actor="${row.id}"></canvas><canvas class="mini" width="48" height="48" data-class="${row.classId}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(cls.name||"sin clase")}`)
+  return hero(`<canvas class="portrait" width="96" height="96" data-actor="${row.id}"></canvas><canvas class="mini" width="48" height="48" data-class="${row.classId}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(cls.name||"sin clase")} <button class="btn small" data-act="portrait">🙂 Importar retrato</button>`)
   +section("Datos",F.text("name","Nombre",row.name)+F.sel("classId","Clase",row.classId,refOpts("classes"),true)+F.num("initialLevel","Nivel inicial",row.initialLevel)
    +(variants.length?F.sel("variant","Variante de la clase",e.variant||"",[["","(normal)"]].concat(variants.map(v=>[v,v]))):"")
    +F.text("affinity","Afinidad",e.affinity)+F.text("group","Grupo",e.group)+F.color("color","Color",e.color||"#61adcf")+F.area("profile","Perfil",row.profile)+F.text("deathQuote","Frase al caer",e.deathQuote))
@@ -172,7 +172,7 @@ const FORMS={
  },
  weapons(row,e){
   const p=P(),spells=Object.keys((p.pack&&p.pack.spells&&p.pack.spells.definitions)||{});
-  return hero(`<canvas class="portrait icon" width="96" height="96" data-item="weapon:${row.id}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(D.WEAPON_TYPES[e.category]||e.category)}`)
+  return hero(`<canvas class="portrait icon" width="96" height="96" data-item="weapon:${row.id}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(D.WEAPON_TYPES[e.category]||e.category)} <button class="btn small" data-act="icon">🖼 Importar icono</button>`)
   +section("Datos",F.text("name","Nombre",row.name)+F.area("description","Descripción",row.description)+F.num("iconIndex","Icono (IconSet)",row.iconIndex)+F.num("price","Precio",e.price))
   +section("Combate",`<div class="grid3">${F.sel("category","Tipo",e.category,withCustom(D.WEAPON_TYPES,e.category))+F.num("might","Poder",e.might)+F.num("hit","Golpe",e.hit)+F.num("crit","Crítico",e.crit)+F.num("weight","Peso",e.weight)+F.num("uses","Usos",e.uses)
    +F.num("minRange","Alcance mín.",e.minRange)+F.num("maxRange","Alcance máx.",e.maxRange)+F.num("rank","Rango necesario",e.rank)+F.num("hits","Golpes por ataque",e.hits,1)+F.bool("magic","Mágica (usa Mag/Res)",e.magic)}</div>`
@@ -183,7 +183,7 @@ const FORMS={
  },
  items(row,e){
   const p=P();
-  return hero(`<canvas class="portrait icon" width="96" height="96" data-item="item:${row.id}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(D.ITEM_EFFECTS[e.effect]||e.effect)}`)
+  return hero(`<canvas class="portrait icon" width="96" height="96" data-item="item:${row.id}"></canvas>`,row.name||"",`ID ${row.id} · ${esc(D.ITEM_EFFECTS[e.effect]||e.effect)} <button class="btn small" data-act="icon">🖼 Importar icono</button>`)
   +section("Datos",F.text("name","Nombre",row.name)+F.area("description","Descripción",row.description)+F.num("iconIndex","Icono (IconSet)",row.iconIndex)+F.num("price","Precio",e.price)+F.num("uses","Usos (0 = infinito)",e.uses))
   +section("Efecto",F.sel("effect","Qué hace",e.effect,withCustom(D.ITEM_EFFECTS,e.effect))
    +(["heal","torch","boost","growth","rank"].indexOf(e.effect)>=0?F.num("power","Potencia",e.power):"")
@@ -296,13 +296,17 @@ async function onClick(ev){
   }
   if(act==="delpreset"){const list=presets();if(!list[DB.sel.presets])return;if(!await Astra.ui.modal(`<h2>Borrar plantilla</h2><p>¿Borrar «${esc(list[DB.sel.presets].name)}»? Los ★ Enemigo que la usen por nombre dejarán de encontrarla.</p>`,[{label:"Cancelar",value:false},{label:"Borrar",value:true,cls:"danger"}]))return;list.splice(DB.sel.presets,1);DB.sel.presets=0;savePresets();render();return;}
   if(act==="import"){Astra.importAnimation({project:p,pack:ensurePack,done:(name,assigned)=>{dirty("pack");if(assigned)dirty("classes");DB.tab="anims";DB.sel.anims=name;DB.mode="normal";render();Astra.ui.toast("🎞 Animación «"+name+"» importada. Recuerda guardar.");}});return;}
-  if(act==="mapsprite"){const row=p.classes[DB.sel.classes];Astra.importMapSprite({project:p,pack:ensurePack,done:name=>{dirty("pack");D.set("classes",row,"art",name);dirty("classes");Astra.clearArtCache();render();Astra.ui.toast("🧍 Sprite «"+name+"» asignado a "+row.name);}});return;}
+  if(act==="mapsprite"){const row=p.classes[DB.sel.classes];Astra.importMapSprite({project:p,pack:ensurePack,classId:row.id,done:name=>{dirty("pack");D.set("classes",row,"art",name);dirty("classes");Astra.clearArtCache();render();Astra.ui.toast("🧍 Sprite «"+name+"» asignado a "+row.name);}});return;}
+  if(act==="portrait"){const row=p.actors[DB.sel.actors];Astra.importPortrait({project:p,pack:ensurePack,actorId:row.id,done:()=>{dirty("pack");render();Astra.ui.toast("🙂 Retrato de "+row.name+" importado. Recuerda guardar.");}});return;}
+  if(act==="icon"){const kind=DB.tab==="weapons"?"weapon":"item";Astra.importItemIcon({project:p,pack:ensurePack,target:kind+":"+DB.sel[DB.tab],done:(t,label)=>{dirty("pack");render();Astra.ui.toast("🖼 Icono asignado a "+label+". Recuerda guardar.");}});return;}
   if(act==="playanim"){if(b.dataset.s){DB.tab="anims";DB.sel.anims=b.dataset.s;DB.mode="normal";render();}return;}
   if(act==="flip"){const on=D.flipAnimation(p.pack,DB.sel.anims);dirty("pack");renderForm();Astra.ui.toast(on?"↔ Volteada (también en el juego). Recuerda guardar.":"↔ Orientación original");return;}
   if(act==="pause"){if(player)player.playing=!player.playing;return;}
   if(act==="slow"){DB.speed=DB.speed===1||!DB.speed?.5:DB.speed===.5?.25:1;if(player)player.speed=DB.speed;b.textContent="🐢 ×"+DB.speed;return;}
  }catch(e){Astra.ui.toast("✖ "+e.message);}
 }
+// Para el menú 📥 Importar: crea el paquete si hace falta, marca cambios y abre la pestaña con lo importado.
+Astra.db={ensurePack,dirty,show(tabId,sel){DB.tab=tabId;if(sel!==undefined)DB.sel[tabId]=sel;if(tabId==="anims")DB.mode="normal";Astra.openDatabase(tabId);}};
 function boot(){
  const w=$("dbWin");w.addEventListener("click",onClick);w.addEventListener("change",onChange);
  w.addEventListener("input",ev=>{if(ev.target.id==="dbFilter"){DB.filter=ev.target.value;renderItems();}});

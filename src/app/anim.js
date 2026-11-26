@@ -16,7 +16,8 @@ Astra.drawLayer=function(c,image,rect,tr,x,y,scale,facing){
  c.imageSmoothingEnabled=false;c.drawImage(image,rect.x,rect.y,rect.w,rect.h,-rect.ox,-rect.oy,rect.w,rect.h);c.restore();
 };
 // Escala fija (2×) para que todas las animaciones se comparen al mismo tamaño, como en el juego.
-// El atacante está a la derecha mirando a la izquierda (como en Fire Emblem); el rival, enfrente.
+// Igual que la batalla del motor: el atacante a la izquierda (dibujado tal cual, debe mirar a la derecha)
+// y el rival a la derecha (volteado). Si una animación mira hacia fuera, se arregla con ↔ Voltear.
 class Player{
  constructor(canvas){this.c=canvas;this.ctx=canvas.getContext("2d");this.t=0;this.playing=true;this.speed=1;this.src=null;this.rival=null;this.raf=0;this.onTick=null;this.scale=2;}
  load(src){this.src=src;this.t=0;}
@@ -25,7 +26,7 @@ class Player{
  stop(){cancelAnimationFrame(this.raf);this.raf=0;}
  frameIndex(){return this.src?Math.min(this.src.frames.length-1,Math.floor(this.t)):0;}
  draw(){
-  const c=this.ctx,W=this.c.width,H=this.c.height,ground=H-46,S=this.scale||2,ax=W*.66,ex=W*.22;
+  const c=this.ctx,W=this.c.width,H=this.c.height,ground=H-46,S=this.scale||2,ax=W*.3,ex=W*.74;
   const g=c.createLinearGradient(0,0,0,H);g.addColorStop(0,"#1b3a4a");g.addColorStop(.62,"#2c5568");g.addColorStop(.63,"#3e5b3a");g.addColorStop(1,"#22331f");c.fillStyle=g;c.fillRect(0,0,W,H);
   // plataformas
   [[ex,"#6f8f5c"],[ax,"#7d9c69"]].forEach(([x,col])=>{c.fillStyle=col;c.beginPath();c.ellipse(x,ground+4,W*.17,12,0,0,Math.PI*2);c.fill();c.fillStyle="#0004";c.beginPath();c.ellipse(x,ground+8,W*.17,10,0,0,Math.PI);c.fill();});
@@ -85,12 +86,18 @@ Astra.unzip=async function(blob){
 };
 const base=n=>String(n).split(/[\\/]/).pop().toLowerCase();
 
+// Archivos soltados: también carpetas completas (se recorren).
+Astra.droppedFiles=async function(dt){
+ const out=[],walk=async entry=>{if(entry.isFile)out.push(await new Promise(r=>entry.file(r)));else if(entry.isDirectory){const r=entry.createReader();let batch;do{batch=await new Promise(res=>r.readEntries(res));for(const e of batch)await walk(e);}while(batch.length);}};
+ const items=[...dt.items].map(i=>i.webkitGetAsEntry&&i.webkitGetAsEntry()).filter(Boolean);if(items.length){for(const e of items)await walk(e);return out;}return [...dt.files];
+};
 // ---------- ventana del importador ----------
 function win(html){
  let w=$("animWin");if(!w){w=document.createElement("div");w.id="animWin";w.className="overlay dim";document.body.appendChild(w);}
  w.innerHTML=`<div class="awin">${html}</div>`;w.classList.remove("hidden");return w;
 }
 const closeWin=()=>{const w=$("animWin");if(w){w.classList.add("hidden");w.innerHTML="";}};
+Astra.imgTools={loadImage,pixels,cornerKey,removeKey,win,closeWin};
 
 // opts: {project, pack(): devuelve el paquete (lo crea si falta), done(nombre)}
 Astra.importAnimation=function(opts){
@@ -103,6 +110,8 @@ Astra.importAnimation=function(opts){
   w.onclick=onClick;w.onchange=onChange;w.oninput=onInput;return w;};
  shell();
  pickSource();
+ // Archivos que ya trae el menú 📥 Importar (arrastrados o descargados de un enlace).
+ if(opts.files&&opts.files.length){const f=opts.files;if(f.length===1&&/\.png$/i.test(f[0].name))loadSheet(f[0]);else loadFE(f);}
  function pickSource(){
   $("awLeft").innerHTML=`<div class="drop" id="awDrop"><div class="big">🎞</div><p><b>Arrastra aquí</b> la hoja PNG, el .zip o la carpeta de la animación</p>
    <div class="srcs"><label class="src"><input type="file" accept="image/png" data-in="sheet" hidden><b>📄 Hoja de sprites</b><span>Un PNG con todos los fotogramas en rejilla.</span></label>
@@ -111,11 +120,7 @@ Astra.importAnimation=function(opts){
    <p class="help">Formato FE Essentials (feessentials.com), FE Repo y FEBuilder: fotogramas PNG de 240×160 y un script con <code>/// - Mode 1</code>, <code>3 p- frame.png</code>, <code>C1A</code>…</p></div>`;
   $("awRight").innerHTML=`<div class="card"><h3>¿Cómo funciona?</h3><ol class="help"><li>Carga la animación.</li><li>Revisa la vista previa: los pies deben quedar sobre la plataforma.</li><li>Elige el orden de fotogramas (los paquetes de FE ya lo traen) y el momento del golpe ⚡.</li><li>Asígnala a una clase y guarda.</li></ol></div>`;
   const drop=$("awDrop");drop.ondragover=e=>{e.preventDefault();drop.classList.add("over");};drop.ondragleave=()=>drop.classList.remove("over");
-  drop.ondrop=async e=>{e.preventDefault();drop.classList.remove("over");const files=await droppedFiles(e.dataTransfer);if(files.length===1&&/\.png$/i.test(files[0].name))loadSheet(files[0]);else loadFE(files);};
- }
- async function droppedFiles(dt){
-  const out=[],walk=async entry=>{if(entry.isFile)out.push(await new Promise(r=>entry.file(r)));else if(entry.isDirectory){const r=entry.createReader();let batch;do{batch=await new Promise(res=>r.readEntries(res));for(const e of batch)await walk(e);}while(batch.length);}};
-  const items=[...dt.items].map(i=>i.webkitGetAsEntry&&i.webkitGetAsEntry()).filter(Boolean);if(items.length){for(const e of items)await walk(e);return out;}return [...dt.files];
+  drop.ondrop=async e=>{e.preventDefault();drop.classList.remove("over");const files=await Astra.droppedFiles(e.dataTransfer);if(files.length===1&&/\.png$/i.test(files[0].name))loadSheet(files[0]);else loadFE(files);};
  }
  // --- hoja en rejilla ---
  async function loadSheet(file){
@@ -151,7 +156,8 @@ Astra.importAnimation=function(opts){
     const t=D.trim(pixels(c),{x:0,y:0,w:c.width,h:c.height},null);index[name]=I.frames.length;
     I.frames.push(t?{img:c,sx:t.x,sy:t.y,w:t.w,h:t.h,dx:t.dx,dy:t.dy,label:name}:{img:c,sx:0,sy:0,w:1,h:1,dx:0,dy:0,label:name,empty:true});}
    T.assert(I.frames.length,"No encontré los PNG de los fotogramas. Faltan: "+missing.slice(0,4).join(", "));
-   I.source="fe";I.cell={w:I.frames[0].img.width,h:I.frames[0].img.height};
+   // En GBA el jugador está a la derecha mirando a la izquierda; en Astra el atacante mira a la derecha.
+   I.source="fe";I.mirror=true;I.cell={w:I.frames[0].img.width,h:I.frames[0].img.height};
    const stand=(modes[9]||modes[1]||modes[5]).steps[0],sf=I.frames[index[stand.file]]||I.frames[0];I.anchor=D.guessAnchor(pixels(sf.img),{x:0,y:0,w:sf.img.width,h:sf.img.height},null);
    const conv=m=>m?{steps:m.steps.filter(s=>index[s.file]!==undefined).map(s=>({frame:index[s.file],ticks:s.ticks})),impact:m.impact}:null;
    const melee=D.feTracks(modes,false),far=D.feTracks(modes,true);
@@ -173,7 +179,7 @@ Astra.importAnimation=function(opts){
  const track=()=>I.tracks[I.mode];
  function ready(){
   $("awSave").disabled=false;
-  hint(I.source==="fe"?`Paquete de FE: modos ${I.modesFound.join(", ")}. Ya trae el orden y el golpe ⚡; solo revisa los pies y asígnala.`:"Haz clic en las celdas para añadirlas a la pista, en orden. Marca con ⚡ el fotograma del golpe.");
+  hint(I.source==="fe"?`Paquete de FE: modos ${I.modesFound.join(", ")}. Ya trae el orden y el golpe ⚡ y va volteada para mirar al rival; solo revisa los pies y asígnala.`:"Haz clic en las celdas para añadirlas a la pista, en orden. Marca con ⚡ el fotograma del golpe.");
   renderLeft();renderRight();
  }
  function renderLeft(){
@@ -203,7 +209,7 @@ Astra.importAnimation=function(opts){
    <label class="field">Pies Y<input type="number" data-v="ay" value="${I.anchor.y}"></label>
    <label class="field">Escala<input type="number" step="0.25" min="0.25" data-v="zoom" value="${I.zoom}"></label>
   </div>
-  <div class="row2"><label class="field check2"><input type="checkbox" data-v="mirror"${I.mirror?" checked":""}> ↔ Voltear (si mira hacia el lado equivocado)</label><label class="field"><select data-v="rival">${Astra.rivalOptions(p,Astra.rivalName())}</select></label></div>
+  <div class="row2"><label class="field check2"><input type="checkbox" data-v="mirror"${I.mirror?" checked":""}> ↔ Voltear (debe mirar a la derecha, hacia el rival)</label><label class="field"><select data-v="rival">${Astra.rivalOptions(p,Astra.rivalName())}</select></label></div>
   ${I.source==="sheet"?`<div class="row3"><label class="field">Celda ancho<input type="number" data-v="cw" value="${I.cell.w}"></label><label class="field">Celda alto<input type="number" data-v="ch" value="${I.cell.h}"></label><label class="field">Fondo<input type="color" data-v="key" value="${hex(I.key)||"#000000"}" ${I.key?"":"disabled"}></label></div>`:""}
   <p class="help">La línea roja en la hoja marca los pies. Si el personaje flota o se hunde en la plataforma, ajusta <b>Pies Y</b>.</p>
   <div class="tabs">${Object.keys(D.MODES).map(m=>`<button class="${I.mode===m?"on":""}" data-mode="${m}">${D.MODES[m]} <small>${I.tracks[m]?I.tracks[m].steps.length:"= Normal"}</small></button>`).join("")}</div>
@@ -275,11 +281,12 @@ Astra.importAnimation=function(opts){
 // GBA (FE Essentials): 16×48 o 32×96 = 3 fotogramas en vertical. Se convierte al formato del motor:
 // columnas = fotogramas (0,1,2,1) y filas = direcciones (las 4 iguales). Rejillas de 3 columnas se usan tal cual.
 Astra.importMapSprite=function(opts){
- const p=opts.project;let S=null;
+ const p=opts.project;let S=null;const pickClass=opts.classId===undefined;
  const w=win(`<header><h2>🧍 Sprite de mapa</h2><span class="grow"></span><button class="btn small" data-x="close">✕</button></header>
   <div class="awbody single"><div id="msBody"><label class="drop"><input type="file" accept="image/png" hidden><div class="big">🧍</div><p><b>Elige el PNG del sprite de mapa</b></p><p class="help">FE Essentials / GBA: tira vertical de 3 fotogramas (16×48 o 32×96). También rejillas de 3 columnas (como las de tu proyecto, 192×144).</p></label></div></div>
   <footer><span class="help" id="msHint"></span><span class="grow"></span><button class="btn" data-x="close">Cancelar</button><button class="btn gold" data-x="save" disabled id="msSave">💾 Guardar sprite</button></footer>`);
- w.onchange=async e=>{const f=e.target.files&&e.target.files[0];if(f)try{await load(f);}catch(err){$("msHint").textContent="✖ "+err.message;}};
+ w.onchange=async e=>{if(e.target.id==="msClass")return;const f=e.target.files&&e.target.files[0];if(f)try{await load(f);}catch(err){$("msHint").textContent="✖ "+err.message;}};
+ if(opts.file)load(opts.file).catch(err=>{$("msHint").textContent="✖ "+err.message;});
  w.onclick=async e=>{const b=e.target.closest("[data-x]");if(!b)return;if(b.dataset.x==="close")return closeWin();if(b.dataset.x==="save")save();};
  async function load(file){
   const raw=await loadImage(file);removeKey(raw,cornerKey(raw));const vertical=raw.width<=64&&raw.height>=raw.width*2.5;
@@ -289,7 +296,7 @@ Astra.importMapSprite=function(opts){
   else{fw=Math.floor(raw.width/3);fh=Math.floor(raw.height/(raw.height%3===0&&raw.height/3<=fw*1.5?3:4));}
   const anchor=D.guessAnchor(pixels(sheet),{x:0,y:0,w:fw,h:fh},null);
   S={name:file.name.replace(/\.png$/i,"").replace(/^Map/,""),sheet,fw,fh,anchorY:anchor.y};
-  $("msBody").innerHTML=`<div class="row2"><label class="field wide">Nombre<input id="msName" value="${esc(S.name)}"></label></div><div class="msprev"><canvas id="msCanvas" width="360" height="140"></canvas></div><p class="help">Fotograma ${fw}×${fh}${vertical?" (convertido del formato GBA)":""}. Así se verá en el mapa con los colores de cada equipo.</p>`;
+  $("msBody").innerHTML=`<div class="row2"><label class="field wide">Nombre<input id="msName" value="${esc(S.name)}"></label>${pickClass?`<label class="field">Usarlo en la clase<select id="msClass"><option value="0">— ninguna —</option>${(p.classes||[]).filter(r=>r&&r.name).map(r=>`<option value="${r.id}">${r.id} · ${esc(r.name)}</option>`).join("")}</select></label>`:""}</div><div class="msprev"><canvas id="msCanvas" width="360" height="140"></canvas></div><p class="help">Fotograma ${fw}×${fh}${vertical?" (convertido del formato GBA)":""}. Así se verá en el mapa con los colores de cada equipo.</p>`;
   const cv=$("msCanvas"),x=cv.getContext("2d");x.imageSmoothingEnabled=false;x.fillStyle="#2c4a3a";x.fillRect(0,0,cv.width,cv.height);
   const pal=p.pack&&p.pack.palette;[1,2,3].forEach((team,i)=>{const s=Astra.crop({im:sheet,sx:0,sy:0,w:fw,h:fh},pal,team),k=Math.min(80/s.w,80/s.h,4);x.drawImage(s.im,s.sx,s.sy,s.w,s.h,40+i*110,110-s.h*k,s.w*k,s.h*k);});
   $("msSave").disabled=false;
@@ -298,7 +305,7 @@ Astra.importMapSprite=function(opts){
   try{const name=String($("msName").value||"").trim();T.assert(name,"Ponle un nombre.");const pack=opts.pack();pack.units=pack.units||{};
    const path="img/astra/map/"+D.fileName(name)+".png",blob=await new Promise(r=>S.sheet.toBlob(r,"image/png"));await p.backend.write(path,blob);p.images[path]=createImageBitmap(S.sheet);
    pack.units[name]=Object.assign({name,clips:{}},pack.units[name]||{},{map:{path,width:S.fw,height:S.fh,anchorY:S.anchorY}});
-   closeWin();opts.done(name);
+   const classId=pickClass?Number($("msClass").value)||0:opts.classId;closeWin();opts.done(name,classId);
   }catch(e){$("msHint").textContent="✖ "+e.message;}
  }
 };

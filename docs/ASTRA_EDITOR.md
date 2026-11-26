@@ -279,7 +279,7 @@ En **📚 Base de datos → 🎞 Animaciones → 📤 Importar animación** pued
 2. **Hoja de sprites PNG** en rejilla (como las de `img/feh/Animations` de tu proyecto, celdas de 192×192). Astra adivina el tamaño de celda, ignora las celdas vacías y tú haces clic en los fotogramas en el orden que quieras.
 3. Cualquier mezcla: después de cargar puedes quitar, añadir o reordenar fotogramas, cambiar la duración de cada uno (en 1/60 s) y mover el golpe ⚡.
 
-**Mira hacia el rival.** El atacante sale a la derecha y el rival a la izquierda. Si tu animación mira hacia el lado contrario, marca **↔ Voltear** al importar. En las animaciones que ya tienes, usa el botón **↔ Voltear** del reproductor; el cambio también se aplica en el juego. En **Rival** eliges otra animación para compararla: todas se dibujan a la misma escala (2×), así ves si una es más grande o más pequeña que las demás.
+**Mira hacia el rival.** Igual que en la batalla del juego, el atacante sale a la **izquierda mirando a la derecha** y el rival a la derecha, volteado. Los paquetes de FE (GBA) miran a la izquierda, así que Astra los importa ya volteados. Si una animación mira hacia fuera, marca **↔ Voltear** al importar. En las animaciones que ya tienes, usa el botón **↔ Voltear** del reproductor; el cambio también se aplica en el juego. En **Rival** eliges otra animación para compararla: todas se dibujan a la misma escala (2×), así ves si una es más grande o más pequeña que las demás.
 
 **Revisa los pies.** La vista previa dibuja la animación exactamente como la batalla de TacticsMZ, sobre su plataforma y al lado de un rival de referencia. Si flota o se hunde, cambia **Pies Y** (la línea roja de la hoja marca dónde están). **Escala** agranda o encoge animaciones de otro tamaño.
 
@@ -290,6 +290,27 @@ En **📚 Base de datos → 🎞 Animaciones → 📤 Importar animación** pued
 - Rejillas de 3 columnas como las de tu proyecto (`MapMyrmidonM.png`, 192×144): se usan tal cual.
 
 Se guarda en `img/astra/map/` y se asigna a la clase. La vista previa lo muestra con los colores de cada equipo. Los sprites con la paleta GBA estándar se recolorean solos (rojo para enemigos, verde para otros).
+
+### 📥 Importar: arrastrar o pegar un enlace
+
+El botón **📥 Importar** (arriba) es la forma rápida de traer cualquier recurso:
+
+- **Arrastra** un PNG, un .zip, el script .txt con sus PNG o una carpeta entera a esa ventana, o **directamente a cualquier parte del editor**.
+- O **pega un enlace** y pulsa **⬇ Descargar**:
+  - una **carpeta de GitHub** (`github.com/usuario/repo/tree/rama/carpeta`): se descargan todos sus PNG, .txt y .zip. Así funciona con el FE Repo, de donde salen muchos recursos de FE Essentials;
+  - un **archivo de GitHub** (`…/blob/…`) o un enlace directo a un `.zip` o `.png` (también Dropbox y Google Drive públicos).
+  - Si el sitio no deja descargar desde el navegador, o el enlace abre una página en vez de un archivo, Astra te lo dice: bájalo tú y arrástralo.
+
+Astra **adivina qué es** y abre el importador que toca:
+
+| Lo que llega | Importador |
+|---|---|
+| Script de FE (`/// - Mode 1`…) con sus PNG, u hoja grande (192×192) | 🎞 Animación de batalla |
+| Tira vertical de 16×48 / 32×96 o rejilla de 3 columnas | 🧍 Sprite de mapa (eliges la clase ahí mismo) |
+| 96×80 o hoja GBA de 128×112 | 🙂 Retrato (eliges el personaje). De la hoja GBA se usa la cara grande |
+| 16×16 o una tira de iconos | ⚔ Icono (eliges un arma, un objeto o todas las armas de un tipo) |
+
+Si no está seguro, te marca la opción más probable y eliges tú. Los retratos e iconos también se importan desde la base de datos (**🙂 Importar retrato** en Personajes, **🖼 Importar icono** en Armas y Objetos). Se guardan en `img/astra/faces/` e `img/astra/icons/`.
 
 > Los recursos de FE Essentials son F2U (gratis para juegos fan, **sin uso comercial**) y piden crédito a sus autores. Copia los créditos desde la página de cada recurso.
 
@@ -354,6 +375,7 @@ src/app/icons.js         Iconos pixel-art propios, IconSet, iconos del paquete, 
 src/app/app.js           Interfaz: paleta, mapa, inspector, historial, teclado.
 src/app/anim.js          Reproductor de animaciones, importador (hoja PNG / FE Essentials / .zip) y sprites de mapa.
 src/app/database.js      Ventana Base de datos.
+src/app/importer.js      Menú 📥 Importar: arrastrar o enlace, detección del tipo, retratos e iconos.
 src/app/style.css        Estilos.
 src/app/shell.html       Plantilla. tools/build.js mete dentro el motor, el modelo, la app y los 3 plugins.
 dist/AstraEditor.html    Resultado: un único archivo.
